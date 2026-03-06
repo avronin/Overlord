@@ -64,8 +64,6 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
   let h264LowFpsStreak = 0;
   let h264FirstFrameAt = 0;
   let h264FramesSeen = 0;
-  let h264WaitingForKeyframe = true;
-  let h264KeyframeWaitLogs = 0;
   const H264_LOW_FPS_THRESHOLD = 6;
   const H264_FALLBACK_WARMUP_MS = 10000;
   const H264_MIN_FRAMES_BEFORE_FALLBACK = 120;
@@ -79,8 +77,6 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
     h264LowFpsStreak = 0;
     h264FirstFrameAt = 0;
     h264FramesSeen = 0;
-    h264WaitingForKeyframe = true;
-    h264KeyframeWaitLogs = 0;
   }
 
   const storedCodecPref = localStorage.getItem(codecPrefKey);
@@ -604,7 +600,6 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
         },
       });
       videoDecoder.configure({ codec: "avc1.42E01E", optimizeForLatency: true });
-      h264WaitingForKeyframe = true;
       return true;
     } catch (err) {
       console.warn("rd: h264 decoder unavailable", err);
@@ -697,17 +692,6 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
       h264FramesSeen += 1;
 
       const isKey = isH264KeyFrame(h264Bytes);
-      if (h264WaitingForKeyframe && !isKey) {
-        h264KeyframeWaitLogs += 1;
-        if (h264KeyframeWaitLogs === 1 || h264KeyframeWaitLogs % 60 === 0) {
-          console.debug("rd: waiting for initial h264 keyframe");
-        }
-        setCodecModeLabel("h264", "waiting keyframe");
-        return;
-      }
-      if (isKey) {
-        h264WaitingForKeyframe = false;
-      }
 
       // If software H264 encode on the agent cannot keep up, automatically
       // fall back to JPEG blocks for a smoother interactive stream.
@@ -739,8 +723,7 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
       } catch (err) {
         console.warn("rd: h264 decode failed", err);
         if (isKeyframeRequiredError(err)) {
-          // Decoder lost sync; wait for the next keyframe instead of forcing JPEG.
-          destroyVideoDecoder();
+          // Startup can begin with delta frames; ignore until a keyframe lands.
           return;
         }
         fallbackToJpegCodec(err);
