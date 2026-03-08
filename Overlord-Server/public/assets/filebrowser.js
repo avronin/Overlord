@@ -1630,42 +1630,76 @@ async function uploadFileViaHttpPull(file, path, transfer) {
 
   console.debug("[filebrowser] upload stage url", { uploadUrl });
 
-  const uploadRequestOptions = {
-    headers: { "Content-Type": "application/octet-stream" },
-    credentials: "include",
-    body: file,
-    signal: transfer.abortController?.signal,
-  };
+  const uploadData = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    transfer.uploadXhr = xhr;
 
-  let uploadRes;
-  try {
-    uploadRes = await fetch(uploadUrl, {
-      method: "POST",
-      ...uploadRequestOptions,
-    });
-  } catch (err) {
-    console.warn("[filebrowser] upload stage POST failed, retrying as PUT", err);
-    uploadRes = await fetch(uploadUrl, {
-      method: "PUT",
-      ...uploadRequestOptions,
-    });
-  }
+    // Keep request-level timeout high for large WAN uploads.
+    xhr.timeout = 30 * 60 * 1000;
+    xhr.open("POST", uploadUrl, true);
+    xhr.withCredentials = true;
+    xhr.responseType = "text";
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
 
-  if (!uploadRes.ok) {
-    const text = await uploadRes.text();
-    console.debug("[filebrowser] upload stage failed", {
-      status: uploadRes.status,
-      body: text,
-    });
-    throw new Error(text || "upload staging failed");
-  }
+    const onAbort = () => {
+      try {
+        xhr.abort();
+      } catch {}
+    };
 
-  transfer.receivedBytes = Math.round(file.size * 0.5);
-  transfer.sent = transfer.receivedBytes;
-  transfer.progress = 50;
-  updateTransferProgress(transfer.id, transfer.progress, transfer.sent, transfer.total);
+    if (transfer.abortController?.signal) {
+      transfer.abortController.signal.addEventListener("abort", onAbort, { once: true });
+    }
 
-  const uploadData = await uploadRes.json();
+    xhr.upload.onprogress = (event) => {
+      const total = event.total || file.size || transfer.total || 0;
+      if (!total) return;
+      const loaded = Math.min(event.loaded, total);
+      // First 50% is browser -> server staging upload.
+      const stageRatio = loaded / total;
+      transfer.receivedBytes = loaded;
+      transfer.sent = loaded;
+      transfer.progress = Math.max(0, Math.min(50, Math.round(stageRatio * 50)));
+      updateTransferProgress(transfer.id, transfer.progress, transfer.sent, transfer.total);
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("upload staging failed"));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error("upload staging timed out"));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error("Upload cancelled"));
+    };
+
+    xhr.onload = () => {
+      const text = xhr.responseText || "";
+      if (xhr.status < 200 || xhr.status >= 300) {
+        console.debug("[filebrowser] upload stage failed", {
+          status: xhr.status,
+          body: text,
+        });
+        reject(new Error(text || "upload staging failed"));
+        return;
+      }
+
+      try {
+        resolve(text ? JSON.parse(text) : {});
+      } catch {
+        reject(new Error("upload staging failed"));
+      }
+    };
+
+    try {
+      xhr.send(file);
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error("upload staging failed"));
+    }
+  });
+
   if (!uploadData?.pullUrl) {
     throw new Error("upload staging failed");
   }
@@ -1700,6 +1734,7 @@ async function uploadFileViaHttpPull(file, path, transfer) {
   transfer.progress = 100;
   transfer.receivedChunks = transfer.expectedChunks;
   updateTransferProgress(transfer.id, transfer.progress, transfer.sent, transfer.total);
+  transfer.uploadXhr = null;
 }
 
 async function uploadFile(file) {
@@ -1725,6 +1760,7 @@ async function uploadFile(file) {
     transferId,
     completed: false,
     abortController: new AbortController(),
+    uploadXhr: null,
   };
 
   fileUploads.set(path, transfer);
