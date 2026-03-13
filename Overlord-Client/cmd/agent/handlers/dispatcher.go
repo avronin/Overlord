@@ -34,7 +34,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, envelope map[string]interface
 	case "hello_ack":
 		return HandleHelloAck(ctx, d.Env, envelope)
 	case "ping":
-		log.Printf("dispatcher: received ping")
 		return HandlePing(ctx, d.Env, envelope)
 	case "pong":
 		return HandlePong(ctx, d.Env, envelope)

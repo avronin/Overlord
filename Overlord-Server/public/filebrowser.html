@@ -275,6 +275,40 @@
         background-color: rgba(59, 130, 246, 0.15);
         border: 1px solid rgba(59, 130, 246, 0.4);
       }
+
+      /* Sidebar styles */
+      .sidebar-item {
+        position: relative;
+        cursor: pointer;
+      }
+      .sidebar-item:hover {
+        background-color: rgba(51, 65, 85, 0.7);
+      }
+      .sidebar-item.active {
+        background-color: rgba(59, 130, 246, 0.15);
+        color: #93c5fd;
+      }
+      .sidebar-item.active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 4px;
+        bottom: 4px;
+        width: 3px;
+        background-color: #3b82f6;
+        border-radius: 0 2px 2px 0;
+      }
+      .sidebar-section-title {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: rgb(100 116 139);
+        padding: 0.5rem 0.75rem 0.25rem;
+      }
+      @media (max-width: 1023px) {
+        #sidebar { display: none !important; }
+      }
     </style>
     <script src="/assets/toast.js"></script>
     <script src="/assets/ripple.js"></script>
@@ -282,8 +316,33 @@
   <body class="min-h-screen bg-slate-950 text-slate-100">
     <header id="top-nav"></header>
 
-    <main class="px-5 py-6">
-      <div class="max-w-7xl mx-auto flex flex-col gap-5">
+    <main class="px-5 py-4">
+      <div class="max-w-[1600px] mx-auto flex gap-4">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-52 flex-shrink-0 hidden lg:block">
+          <div class="sticky top-6 flex flex-col gap-3">
+            <div class="bg-slate-900/70 border border-slate-800 rounded-lg overflow-hidden">
+              <div class="px-3 py-2.5 border-b border-slate-700/50 flex items-center gap-2">
+                <i class="fa-solid fa-bookmark text-blue-400 text-xs"></i>
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Quick Access</span>
+              </div>
+              <div id="sidebar-content" class="p-1.5">
+                <div class="text-xs text-slate-500 text-center py-4">Connecting...</div>
+              </div>
+            </div>
+            <div class="bg-slate-900/70 border border-slate-800 rounded-lg overflow-hidden">
+              <div class="px-3 py-2.5 border-b border-slate-700/50 flex items-center gap-2">
+                <i class="fa-solid fa-hard-drive text-slate-400 text-xs"></i>
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Drives</span>
+              </div>
+              <div id="sidebar-drives" class="p-1.5">
+                <div class="text-xs text-slate-500 text-center py-4">Connecting...</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+        <!-- Main Content -->
+        <div class="flex-1 min-w-0 flex flex-col gap-4">
         <!-- Status Bar -->
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div class="flex items-center gap-2 flex-wrap">
@@ -524,6 +583,7 @@
           <div id="file-list" class="divide-y divide-slate-800">
             <!-- Files will be inserted here -->
           </div>
+        </div>
         </div>
       </div>
     </main>

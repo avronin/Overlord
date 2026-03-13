@@ -289,6 +289,7 @@ function initializeRenderer() {
     openModal,
     requestPreview,
     requestThumbnail,
+    pingClient: (id) => sendCommand(id, "ping"),
     userRole: currentUser?.role,
   });
   registerRenderer(renderMerge);

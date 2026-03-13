@@ -227,6 +227,9 @@ function handleMessage(msg) {
   switch (msg.type) {
     case "ready":
       console.log("Session ready:", msg.sessionId);
+      if (msg.clientUser && msg.clientOs) {
+        applyClientInfo(msg.clientOs, msg.clientUser);
+      }
       break;
     case "status":
       console.log("[DEBUG] Status message:", msg);
@@ -341,6 +344,102 @@ function getFileExt(name = "") {
   const idx = name.lastIndexOf(".");
   if (idx < 0 || idx === name.length - 1) return "";
   return name.slice(idx + 1).toLowerCase();
+}
+
+const FILE_ICON_MAP = {
+  // Images
+  jpg: "fa-file-image text-purple-400", jpeg: "fa-file-image text-purple-400",
+  png: "fa-file-image text-purple-400", gif: "fa-file-image text-purple-400",
+  webp: "fa-file-image text-purple-400", bmp: "fa-file-image text-purple-400",
+  svg: "fa-file-image text-purple-400", ico: "fa-file-image text-purple-400",
+  tiff: "fa-file-image text-purple-400", tif: "fa-file-image text-purple-400",
+  // Video
+  mp4: "fa-file-video text-pink-400", avi: "fa-file-video text-pink-400",
+  mkv: "fa-file-video text-pink-400", mov: "fa-file-video text-pink-400",
+  wmv: "fa-file-video text-pink-400", flv: "fa-file-video text-pink-400",
+  webm: "fa-file-video text-pink-400", m4v: "fa-file-video text-pink-400",
+  // Audio
+  mp3: "fa-file-audio text-orange-400", wav: "fa-file-audio text-orange-400",
+  flac: "fa-file-audio text-orange-400", ogg: "fa-file-audio text-orange-400",
+  aac: "fa-file-audio text-orange-400", wma: "fa-file-audio text-orange-400",
+  m4a: "fa-file-audio text-orange-400",
+  // PDF
+  pdf: "fa-file-pdf text-red-400",
+  // Word
+  doc: "fa-file-word text-blue-400", docx: "fa-file-word text-blue-400",
+  odt: "fa-file-word text-blue-400", rtf: "fa-file-word text-blue-400",
+  // Excel
+  xls: "fa-file-excel text-green-400", xlsx: "fa-file-excel text-green-400",
+  ods: "fa-file-excel text-green-400", csv: "fa-file-excel text-green-400",
+  // PowerPoint
+  ppt: "fa-file-powerpoint text-orange-500", pptx: "fa-file-powerpoint text-orange-500",
+  odp: "fa-file-powerpoint text-orange-500",
+  // Archives
+  zip: "fa-file-zipper text-yellow-500", rar: "fa-file-zipper text-yellow-500",
+  "7z": "fa-file-zipper text-yellow-500", tar: "fa-file-zipper text-yellow-500",
+  gz: "fa-file-zipper text-yellow-500", bz2: "fa-file-zipper text-yellow-500",
+  xz: "fa-file-zipper text-yellow-500", tgz: "fa-file-zipper text-yellow-500",
+  // Code
+  js: "fa-file-code text-yellow-300", ts: "fa-file-code text-blue-300",
+  jsx: "fa-file-code text-cyan-300", tsx: "fa-file-code text-cyan-300",
+  py: "fa-file-code text-yellow-300", go: "fa-file-code text-cyan-400",
+  rs: "fa-file-code text-orange-300", c: "fa-file-code text-blue-300",
+  cpp: "fa-file-code text-blue-300", h: "fa-file-code text-blue-300",
+  java: "fa-file-code text-red-300", cs: "fa-file-code text-green-300",
+  rb: "fa-file-code text-red-400", php: "fa-file-code text-indigo-300",
+  swift: "fa-file-code text-orange-400", kt: "fa-file-code text-purple-300",
+  // Web
+  html: "fa-code text-orange-300", htm: "fa-code text-orange-300",
+  css: "fa-code text-blue-300", scss: "fa-code text-pink-300",
+  sass: "fa-code text-pink-300", less: "fa-code text-blue-300",
+  // Config / Data
+  json: "fa-file-code text-emerald-400", yaml: "fa-file-code text-emerald-400",
+  yml: "fa-file-code text-emerald-400", xml: "fa-file-code text-emerald-400",
+  toml: "fa-file-code text-emerald-400", ini: "fa-file-code text-emerald-400",
+  cfg: "fa-file-code text-emerald-400", conf: "fa-file-code text-emerald-400",
+  env: "fa-file-code text-emerald-400",
+  // Text / Docs
+  txt: "fa-file-lines text-slate-300", md: "fa-file-lines text-slate-300",
+  log: "fa-file-lines text-slate-400", readme: "fa-file-lines text-slate-300",
+  // Executables
+  exe: "fa-gear text-green-400", msi: "fa-gear text-green-400",
+  com: "fa-gear text-green-400", app: "fa-gear text-green-400",
+  appimage: "fa-gear text-green-400",
+  // Scripts
+  bat: "fa-terminal text-green-300", cmd: "fa-terminal text-green-300",
+  ps1: "fa-terminal text-blue-300", sh: "fa-terminal text-green-300",
+  bash: "fa-terminal text-green-300", zsh: "fa-terminal text-green-300",
+  // Libraries
+  dll: "fa-puzzle-piece text-indigo-400", so: "fa-puzzle-piece text-indigo-400",
+  dylib: "fa-puzzle-piece text-indigo-400", lib: "fa-puzzle-piece text-indigo-400",
+  a: "fa-puzzle-piece text-indigo-400",
+  // Databases
+  db: "fa-database text-amber-400", sqlite: "fa-database text-amber-400",
+  sqlite3: "fa-database text-amber-400", mdb: "fa-database text-amber-400",
+  sql: "fa-database text-amber-400",
+  // Fonts
+  ttf: "fa-font text-teal-400", otf: "fa-font text-teal-400",
+  woff: "fa-font text-teal-400", woff2: "fa-font text-teal-400",
+  eot: "fa-font text-teal-400",
+  // Keys/certs
+  pem: "fa-key text-yellow-300", crt: "fa-key text-yellow-300",
+  cer: "fa-key text-yellow-300", key: "fa-key text-yellow-300",
+  pfx: "fa-key text-yellow-300", p12: "fa-key text-yellow-300",
+  // Disk images
+  iso: "fa-compact-disc text-slate-300", img: "fa-compact-disc text-slate-300",
+  vhd: "fa-compact-disc text-slate-300", vmdk: "fa-compact-disc text-slate-300",
+};
+
+function getFileIcon(entry) {
+  if (entry.isDir) {
+    return '<i class="fa-solid fa-folder text-yellow-400"></i>';
+  }
+  const ext = getFileExt(entry.name);
+  const cls = FILE_ICON_MAP[ext];
+  if (cls) {
+    return `<i class="fa-solid ${cls}"></i>`;
+  }
+  return '<i class="fa-solid fa-file text-slate-400"></i>';
 }
 
 function entryMatchesFilter(entry, mode) {
@@ -576,6 +675,27 @@ function handleFileList(msg) {
   currentPath = msg.path;
   directoryEntries = Array.isArray(msg.entries) ? msg.entries : [];
 
+  // Sidebar: detect OS/home on first successful listing
+  if (!detectedOS) {
+    detectOSAndHome(currentPath);
+    // If root listing with drive letters, detect as Windows
+    if (!detectedOS && (!currentPath || currentPath === ".") && directoryEntries.some((e) => e.isDir && e.name.match(/^[A-Za-z]:$/))) {
+      detectedOS = "windows";
+      updateSidebar();
+    }
+  } else if (!detectedHomePath) {
+    // Keep trying to detect home path on subsequent navigations
+    detectOSAndHome(currentPath);
+  }
+  // Populate drives panel when at root
+  if (!msg.path || msg.path === ".") {
+    lastDriveEntries = directoryEntries;
+    updateSidebarDrives(directoryEntries);
+  } else if (lastDriveEntries.length === 0) {
+    updateSidebarDrives([]);
+  }
+  highlightSidebarActive();
+
   selectedFiles.clear();
   updateSelectionUI();
   renderCurrentDirectory();
@@ -642,9 +762,7 @@ function createFileRow(entry) {
   row.dataset.path = entry.path;
   row.dataset.isDir = entry.isDir;
 
-  const icon = entry.isDir
-    ? '<i class="fa-solid fa-folder text-yellow-400"></i>'
-    : '<i class="fa-solid fa-file text-slate-400"></i>';
+  const icon = getFileIcon(entry);
 
   const size = entry.isDir ? "-" : formatBytes(entry.size);
   const modTime = new Date(entry.modTime * 1000).toLocaleString();
@@ -1825,6 +1943,128 @@ document.addEventListener("click", (e) => {
 setupDragAndDropUpload();
 updateStatus("connecting", "Connecting...");
 updateBackButton();
+
+// ── Sidebar Quick Access ──
+let detectedHomePath = "";
+let detectedOS = "";
+const sidebarContent = document.getElementById("sidebar-content");
+const sidebarDrives = document.getElementById("sidebar-drives");
+let lastDriveEntries = [];
+
+function detectOSAndHome(path) {
+  if (!path || path === ".") return;
+  const winMatch = path.match(/^([A-Za-z]:\\Users\\[^\\]+)/i);
+  if (winMatch) { detectedOS = "windows"; detectedHomePath = winMatch[1]; updateSidebar(); return; }
+  if (path.match(/^[A-Za-z]:\\/)) { detectedOS = "windows"; updateSidebar(); return; }
+  const macMatch = path.match(/^(\/Users\/[^\/]+)/);
+  if (macMatch) { detectedOS = "mac"; detectedHomePath = macMatch[1]; updateSidebar(); return; }
+  const linuxMatch = path.match(/^(\/home\/[^\/]+)/);
+  if (linuxMatch) { detectedOS = "linux"; detectedHomePath = linuxMatch[1]; updateSidebar(); return; }
+  if (path.startsWith("/root")) { detectedOS = "linux"; detectedHomePath = "/root"; updateSidebar(); return; }
+  if (path.startsWith("/")) { detectedOS = "linux"; updateSidebar(); }
+}
+
+function applyClientInfo(osStr, userName) {
+  if (detectedOS && detectedHomePath) return;
+  const os = (osStr || "").toLowerCase();
+  const user = (userName || "").trim();
+  if (!user) return;
+  if (os.includes("windows")) {
+    detectedOS = "windows";
+    detectedHomePath = "C:\\Users\\" + user;
+  } else if (os.includes("darwin") || os.includes("mac")) {
+    detectedOS = "mac";
+    detectedHomePath = "/Users/" + user;
+  } else {
+    detectedOS = "linux";
+    detectedHomePath = user === "root" ? "/root" : "/home/" + user;
+  }
+  updateSidebar();
+  updateSidebarDrives(lastDriveEntries);
+}
+
+function sidebarItem(icon, label, path, color) {
+  const active = currentPath && (currentPath === path || currentPath.startsWith(path + "/") || currentPath.startsWith(path + "\\"));
+  return `<button class="sidebar-item w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm text-slate-300 hover:text-white transition-colors text-left${active ? " active" : ""}" data-path="${escapeHtml(path)}">
+    <i class="fa-solid ${icon} ${color} w-4 text-center text-xs"></i>
+    <span class="truncate">${label}</span>
+  </button>`;
+}
+
+function updateSidebar() {
+  if (!sidebarContent) return;
+  let html = "";
+  if (detectedOS === "windows" && detectedHomePath) {
+    const h = detectedHomePath;
+    html += sidebarItem("fa-desktop", "Desktop", h + "\\Desktop", "text-blue-400");
+    html += sidebarItem("fa-download", "Downloads", h + "\\Downloads", "text-green-400");
+    html += sidebarItem("fa-file-lines", "Documents", h + "\\Documents", "text-yellow-400");
+    html += sidebarItem("fa-images", "Pictures", h + "\\Pictures", "text-purple-400");
+    html += sidebarItem("fa-music", "Music", h + "\\Music", "text-pink-400");
+    html += sidebarItem("fa-video", "Videos", h + "\\Videos", "text-red-400");
+    html += '<div class="border-t border-slate-700/50 my-1.5"></div>';
+    html += sidebarItem("fa-gear", "AppData", h + "\\AppData", "text-slate-400");
+    html += sidebarItem("fa-temperature-high", "Temp", h + "\\AppData\\Local\\Temp", "text-orange-400");
+    html += sidebarItem("fa-folder-open", "Program Files", "C:\\Program Files", "text-amber-400");
+    html += sidebarItem("fa-window-maximize", "Windows", "C:\\Windows", "text-blue-300");
+  } else if (detectedOS === "linux" || detectedOS === "mac") {
+    if (detectedHomePath) {
+      html += sidebarItem("fa-home", "Home", detectedHomePath, "text-blue-400");
+      html += sidebarItem("fa-desktop", "Desktop", detectedHomePath + "/Desktop", "text-blue-300");
+      html += sidebarItem("fa-download", "Downloads", detectedHomePath + "/Downloads", "text-green-400");
+      html += sidebarItem("fa-file-lines", "Documents", detectedHomePath + "/Documents", "text-yellow-400");
+      html += '<div class="border-t border-slate-700/50 my-1.5"></div>';
+    }
+    html += sidebarItem("fa-gears", "/etc", "/etc", "text-slate-400");
+    html += sidebarItem("fa-database", "/var", "/var", "text-amber-400");
+    html += sidebarItem("fa-temperature-high", "/tmp", "/tmp", "text-orange-400");
+    html += sidebarItem("fa-cube", "/opt", "/opt", "text-teal-400");
+    html += sidebarItem("fa-user", "/usr", "/usr", "text-indigo-400");
+  } else {
+    html = '<div class="text-xs text-slate-500 text-center py-3">Navigate to detect paths</div>';
+  }
+  sidebarContent.innerHTML = html;
+  bindSidebarClicks(sidebarContent);
+}
+
+function updateSidebarDrives(entries) {
+  if (!sidebarDrives) return;
+  if (!entries || entries.length === 0) {
+    if (detectedOS === "windows") {
+      sidebarDrives.innerHTML = sidebarItem("fa-hard-drive", "This PC", ".", "text-slate-300");
+    } else {
+      sidebarDrives.innerHTML = sidebarItem("fa-hard-drive", "Root /", "/", "text-slate-300");
+    }
+    bindSidebarClicks(sidebarDrives);
+    return;
+  }
+  let html = "";
+  entries.forEach((e) => {
+    if (e.isDir && e.name.match(/^[A-Za-z]:$/)) {
+      html += sidebarItem("fa-hard-drive", e.name + "\\", e.name + "\\", "text-slate-300");
+    }
+  });
+  if (!html) {
+    html = sidebarItem("fa-hard-drive", detectedOS === "windows" ? "This PC" : "Root /", detectedOS === "windows" ? "." : "/", "text-slate-300");
+  }
+  sidebarDrives.innerHTML = html;
+  bindSidebarClicks(sidebarDrives);
+}
+
+function bindSidebarClicks(container) {
+  container.querySelectorAll(".sidebar-item").forEach((btn) => {
+    btn.onclick = () => listFiles(btn.dataset.path);
+  });
+}
+
+function highlightSidebarActive() {
+  document.querySelectorAll(".sidebar-item").forEach((btn) => {
+    const p = btn.dataset.path;
+    const active = currentPath && (currentPath === p || currentPath.startsWith(p + "/") || currentPath.startsWith(p + "\\"));
+    btn.classList.toggle("active", active);
+  });
+}
+
 connect();
 
 function addTransferToUI(transfer) {
@@ -2027,9 +2267,11 @@ function handleFileSearchResult(msg) {
       ? `<div class="text-xs text-slate-500 mt-1 font-mono">${escapeHtml(result.match.substring(0, 100))}</div>`
       : "";
 
+    const searchIcon = getFileIcon({ isDir: false, name: fileName });
+
     row.innerHTML = `
       <div class="flex items-center gap-2">
-        <i class="fa-solid fa-file text-slate-400"></i>
+        ${searchIcon}
         <div class="flex-1">
           <div class="font-medium">${escapeHtml(fileName)}<span class="text-slate-500">${lineInfo}</span></div>
           <div class="text-xs text-slate-400">${escapeHtml(result.path)}</div>

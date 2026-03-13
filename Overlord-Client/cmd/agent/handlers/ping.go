@@ -15,13 +15,11 @@ func HandlePing(ctx context.Context, env *runtime.Env, envelope map[string]inter
 	if ts == 0 {
 		ts = time.Now().UnixMilli()
 	}
-	log.Printf("ping: received ts=%d, sending pong", ts)
 	pong := wire.Pong{Type: "pong", TS: ts}
 	if err := wire.WriteMsg(ctx, env.Conn, pong); err != nil {
 		log.Printf("ping: failed to send pong: %v", err)
 		return err
 	}
-	log.Printf("ping: pong sent successfully")
 
 	return nil
 }

@@ -60,7 +60,7 @@ export function handleFileBrowserViewerOpen(ws: ServerWebSocket<SocketData>) {
   const session: FileBrowserViewer = { id: sessionId, clientId, viewer: ws, createdAt: Date.now() };
   sessionManager.getAllFileBrowserSessions().set(sessionId, session);
   ws.data.sessionId = sessionId;
-  safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target });
+  safeSendViewer(ws, { type: "ready", sessionId, clientId, clientOnline: !!target, clientUser: target?.user || "", clientOs: target?.os || "" });
   if (!target) {
     safeSendViewer(ws, { type: "status", status: "offline", reason: "Client is offline", sessionId });
   }

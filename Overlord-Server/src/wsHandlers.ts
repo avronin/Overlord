@@ -136,14 +136,13 @@ export function handlePong(info: ClientInfo, payload: WireMessage) {
 
   if (rtt >= 0 && rtt < maxRttMs) {
     info.pingMs = rtt;
-    if (shouldSyncClientToDb(info.id, nowTs)) {
-      upsertClientRow({
-        id: info.id,
-        pingMs: info.pingMs,
-        lastSeen: info.lastSeen,
-        online: 1,
-      });
-    }
+    upsertClientRow({
+      id: info.id,
+      pingMs: info.pingMs,
+      lastSeen: info.lastSeen,
+      online: 1,
+    });
+    lastClientDbSync.set(info.id, nowTs);
 
     metrics.recordPing(rtt);
   } else {

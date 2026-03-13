@@ -23,6 +23,7 @@ export function createRenderer({
   openModal,
   requestPreview,
   requestThumbnail,
+  pingClient,
   userRole,
 }) {
   const isViewer = userRole === "viewer";
@@ -336,6 +337,7 @@ export function createRenderer({
         return;
       }
       if (!client.online) return;
+      if (pingClient) pingClient(client.id);
       requestThumbnail(client.id);
     };
   }
