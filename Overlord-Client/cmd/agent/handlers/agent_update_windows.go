@@ -46,6 +46,9 @@ func runAgentUpdate(sourcePath string, enablePersistence bool) error {
 	if startupEnabled {
 		// Keep startup binary in sync when persistence/startup is enabled.
 		if !samePath(startupPath, currentExe) {
+			if err := backupExecutable(startupPath); err != nil {
+				log.Printf("agent_update[win]: backup warning for startup path: %v", err)
+			}
 			if err := copyExecutableAtomic(sourcePath, startupPath); err != nil {
 				return err
 			}
@@ -73,6 +76,9 @@ func runAgentUpdate(sourcePath string, enablePersistence bool) error {
 		return launchDeferredUpdateScript(sourcePath, restartPath)
 	}
 
+	if err := backupExecutable(restartPath); err != nil {
+		log.Printf("agent_update[win]: backup warning for restart path: %v", err)
+	}
 	if err := copyExecutableAtomic(sourcePath, restartPath); err != nil {
 		return err
 	}

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
@@ -298,12 +299,13 @@ export async function handleDeployRoutes(
         );
       }
 
+      const hash = createHash("sha256").update(bytes).digest("hex");
       target.ws.send(
         encodeMessage({
           type: "command",
           commandType: "agent_update",
           id: uuidv4(),
-          payload: { path: destPath },
+          payload: { path: destPath, hash },
         }),
       );
 

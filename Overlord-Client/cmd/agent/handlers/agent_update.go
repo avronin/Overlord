@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -15,7 +17,7 @@ import (
 	"overlord-client/cmd/agent/wire"
 )
 
-func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string, sourcePath string) error {
+func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string, sourcePath string, expectedHash string) error {
 	sourcePath = strings.TrimSpace(sourcePath)
 	if sourcePath == "" {
 		return wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: false, Message: "missing update path"})
@@ -27,6 +29,10 @@ func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string,
 	}
 	if err := ensureRegularFileOnDisk(sourceAbs); err != nil {
 		return wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: false, Message: err.Error()})
+	}
+
+	if err := verifyFileHash(sourceAbs, expectedHash); err != nil {
+		return wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: false, Message: fmt.Sprintf("integrity check failed: %v", err)})
 	}
 
 	if err := wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: true}); err != nil {
@@ -138,4 +144,47 @@ func samePath(left string, right string) bool {
 		return false
 	}
 	return samePathByOS(left, right)
+}
+
+func verifyFileHash(filePath string, expectedHash string) error {
+	if expectedHash == "" {
+		return nil
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file for hash verification: %w", err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("failed to compute file hash: %w", err)
+	}
+	actualHash := hex.EncodeToString(h.Sum(nil))
+	if actualHash != expectedHash {
+		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+	return nil
+}
+
+func backupExecutable(targetPath string) error {
+	info, err := os.Stat(targetPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
+	backupPath := targetPath + ".bak"
+	src, err := os.Open(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to open executable for backup: %w", err)
+	}
+	defer src.Close()
+	dst, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+	if err != nil {
+		return fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("failed to write backup: %w", err)
+	}
+	log.Printf("agent_update: backed up %q to %q", targetPath, backupPath)
+	return nil
 }

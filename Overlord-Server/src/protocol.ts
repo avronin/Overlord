@@ -81,7 +81,8 @@ export type CommandType =
   | "plugin_load_init"
   | "plugin_load_chunk"
   | "plugin_load_finish"
-  | "plugin_unload";
+  | "plugin_unload"
+  | "agent_update";
 
 export type Command = {
   type: "command";

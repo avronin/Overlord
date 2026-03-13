@@ -5,6 +5,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -43,9 +44,14 @@ func runAgentUpdate(sourcePath string, enablePersistence bool) error {
 		}
 	}
 
-	if currentErr == nil && !samePath(currentExe, restartPath) {
-		if err := copyExecutableAtomic(sourcePath, currentExe); err != nil {
-			return err
+	if currentErr == nil {
+		if !(startupEnabled && samePath(currentExe, startupPath)) {
+			if err := backupExecutable(currentExe); err != nil {
+				log.Printf("agent_update: backup warning: %v", err)
+			}
+			if err := copyExecutableAtomic(sourcePath, currentExe); err != nil {
+				return err
+			}
 		}
 	}
 	_ = os.Remove(sourcePath)
