@@ -971,7 +971,8 @@ func hvncMouseMoveOnThread(display int, x, y int32) error {
 		root := rootWindow(hitHwnd)
 		prevWorking := getWorkingWindow()
 		rememberWorkingWindow(hitHwnd)
-		if prevWorking == 0 || rootWindow(prevWorking) != root {
+		prevRoot := rootWindow(prevWorking)
+		if prevWorking == 0 || (prevRoot != root && !sameProcessWindows(prevRoot, root)) {
 			procSetForegroundWindow.Call(root)
 			procSetActiveWindow.Call(root)
 			procSetFocus.Call(hitHwnd)
@@ -1001,7 +1002,8 @@ func hvncMouseButtonOnThread(button int, down bool) error {
 	prevWorking := getWorkingWindow()
 	rememberWorkingWindow(hitHwnd)
 
-	if down && (prevWorking == 0 || rootWindow(prevWorking) != root) {
+	prevRoot := rootWindow(prevWorking)
+	if down && (prevWorking == 0 || (prevRoot != root && !sameProcessWindows(prevRoot, root))) {
 		procSetForegroundWindow.Call(root)
 		procSetActiveWindow.Call(root)
 		procSetFocus.Call(hitHwnd)
@@ -1105,7 +1107,8 @@ func hvncKeyOnThread(vk uint16, down bool) error {
 	root := rootWindow(hwnd)
 	prevWorking := getWorkingWindow()
 	rememberWorkingWindow(root)
-	if prevWorking == 0 || rootWindow(prevWorking) != root {
+	prevRoot := rootWindow(prevWorking)
+	if prevWorking == 0 || (prevRoot != root && !sameProcessWindows(prevRoot, root)) {
 		procSetForegroundWindow.Call(root)
 		procSetActiveWindow.Call(root)
 		procSetFocus.Call(hwnd)
@@ -1164,6 +1167,19 @@ func rootWindow(hwnd uintptr) uintptr {
 		return hwnd
 	}
 	return r
+}
+
+func windowPID(hwnd uintptr) uint32 {
+	var pid uint32
+	procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	return pid
+}
+
+func sameProcessWindows(a, b uintptr) bool {
+	if a == 0 || b == 0 {
+		return false
+	}
+	return windowPID(a) == windowPID(b)
 }
 
 func setWorkingWindow(hwnd uintptr) {
