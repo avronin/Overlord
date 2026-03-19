@@ -1770,7 +1770,8 @@ func HandleCommand(ctx context.Context, env *runtime.Env, envelope map[string]in
 		res := wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: true}
 		_ = wire.WriteMsg(ctx, env.Conn, res)
 		resetForReconnect(env)
-		return ErrReconnect
+		os.Exit(0)
+		return nil
 	case "reconnect":
 		resetForReconnect(env)
 		res := wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: true}
