@@ -9,9 +9,10 @@ services:
       cache_to:
         - type=local,dest=.docker-cache/buildx,mode=max
     container_name: overlord-server
-    ports:
-      # Bind host-published port. Use 127.0.0.1 for local reverse proxies (ngrok/caddy/traefik).
-      - "${OVERLORD_PUBLISH_HOST:-0.0.0.0}:5173:5173"
+    # Host networking: the container shares the host's network stack directly.
+    # Every port the server binds (5173, SOCKS5 proxies, etc.) is accessible
+    # on the host with zero overhead — no per-port proxy process.
+    network_mode: host
     environment:
       # Optional username for first admin user
       - OVERLORD_USER=admin
@@ -51,8 +52,6 @@ services:
       # Uncomment to use a static config file instead of env vars
       # - ./Overlord-Server/config.json:/app/config.json:ro
     restart: unless-stopped
-    networks:
-      - overlord-network
     healthcheck:
       # Use http:// when OVERLORD_TLS_OFFLOAD=true.
       test: ["CMD-SHELL", "curl -f ${OVERLORD_HEALTHCHECK_URL:-https://localhost:5173/health} >/dev/null 2>&1 || exit 1"]
@@ -60,10 +59,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-networks:
-  overlord-network:
-    driver: bridge
 
 volumes:
   overlord-data:
