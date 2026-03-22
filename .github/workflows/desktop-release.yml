@@ -60,11 +60,20 @@ jobs:
           gh api --method DELETE /repos/${{ github.repository }}/git/refs/tags/Overlord-Desktop-v${{ env.VERSION }} 2>/dev/null || true
         shell: bash
 
+      - name: Create and Push Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f Overlord-Desktop-v${{ env.VERSION }}
+          git push origin Overlord-Desktop-v${{ env.VERSION }} --force
+        shell: bash
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create Overlord-Desktop-v${{ env.VERSION }} "dist/Overlord Setup.exe" "PLEASE_READ.txt" \
+            --verify-tag \
             -t "Overlord Desktop v${{ env.VERSION }}" \
             -n "Automated build release for Overlord Desktop v${{ env.VERSION }}" \
             --draft=false \
