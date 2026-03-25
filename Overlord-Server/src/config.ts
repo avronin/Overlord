@@ -615,3 +615,102 @@ export async function updateAppearanceConfig(customCSS: string): Promise<Config[
   await writePersistentFileConfig(fileConfig);
   return next;
 }
+
+export function getExportableConfig(serverVersion: string): Record<string, unknown> {
+  const config = getConfig();
+  return {
+    _meta: {
+      exportedAt: new Date().toISOString(),
+      version: serverVersion,
+    },
+    auth: {
+      jwtSecret: config.auth.jwtSecret,
+      agentToken: config.auth.agentToken,
+    },
+    notifications: config.notifications,
+    security: config.security,
+    tls: config.tls,
+    enrollment: config.enrollment,
+    appearance: config.appearance,
+  };
+}
+
+export async function importFullConfig(data: Record<string, any>): Promise<{ applied: string[]; warnings: string[] }> {
+  const applied: string[] = [];
+  const warnings: string[] = [];
+
+  const envOverrides: Record<string, string | undefined> = {
+    notifications: process.env.OVERLORD_NOTIFICATION_KEYWORDS || process.env.OVERLORD_NOTIFICATION_WEBHOOK_URL,
+    security: process.env.OVERLORD_SESSION_TTL_HOURS || process.env.OVERLORD_LOGIN_MAX_ATTEMPTS,
+    tls: process.env.OVERLORD_TLS_CERT || process.env.OVERLORD_TLS_CERTBOT_ENABLED,
+    auth: process.env.JWT_SECRET || process.env.OVERLORD_AGENT_TOKEN,
+  };
+
+  if (data.notifications && typeof data.notifications === "object") {
+    await updateNotificationsConfig(data.notifications);
+    applied.push("notifications");
+    if (envOverrides.notifications) {
+      warnings.push("Some notification settings may be overridden by environment variables after restart.");
+    }
+  }
+
+  if (data.security && typeof data.security === "object") {
+    await updateSecurityConfig(data.security);
+    applied.push("security");
+    if (envOverrides.security) {
+      warnings.push("Some security settings may be overridden by environment variables after restart.");
+    }
+  }
+
+  if (data.tls && typeof data.tls === "object") {
+    await updateTlsConfig(data.tls);
+    applied.push("tls");
+    if (envOverrides.tls) {
+      warnings.push("Some TLS settings may be overridden by environment variables after restart.");
+    }
+  }
+
+  if (data.enrollment && typeof data.enrollment === "object") {
+    await updateEnrollmentConfig(data.enrollment);
+    applied.push("enrollment");
+  }
+
+  if (data.appearance && typeof data.appearance === "object") {
+    const css = typeof data.appearance.customCSS === "string" ? data.appearance.customCSS : "";
+    if (css.length <= 51200) {
+      await updateAppearanceConfig(css);
+      applied.push("appearance");
+    } else {
+      warnings.push("Custom CSS exceeds 50 KB limit and was skipped.");
+    }
+  }
+
+  if (data.auth && typeof data.auth === "object") {
+    const dataDir = ensureDataDir();
+    const savePath = resolve(dataDir, "save.json");
+    const savedSecrets = loadSaveSecrets(savePath);
+    let changed = false;
+
+    if (typeof data.auth.jwtSecret === "string" && data.auth.jwtSecret) {
+      if (!savedSecrets.auth) savedSecrets.auth = {};
+      savedSecrets.auth.jwtSecret = data.auth.jwtSecret;
+      changed = true;
+    }
+
+    if (typeof data.auth.agentToken === "string" && data.auth.agentToken) {
+      if (!savedSecrets.auth) savedSecrets.auth = {};
+      savedSecrets.auth.agentToken = data.auth.agentToken;
+      changed = true;
+    }
+
+    if (changed) {
+      persistSaveSecrets(savePath, savedSecrets);
+      applied.push("auth (secrets updated in save.json — restart required)");
+      if (envOverrides.auth) {
+        warnings.push("Auth secrets may be overridden by JWT_SECRET / OVERLORD_AGENT_TOKEN environment variables.");
+      }
+    }
+  }
+
+  return { applied, warnings };
+}

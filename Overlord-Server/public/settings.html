@@ -54,6 +54,53 @@
         </div>
       </section>
 
+      <section id="export-import-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <i class="fa-solid fa-file-export text-amber-400"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold">Export &amp; Import Settings</h2>
+            <p class="text-sm text-slate-400">Backup or restore your Overlord configuration (notifications, security, TLS, appearance, auth tokens).</p>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-700 bg-slate-900 px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div class="flex-1 space-y-1">
+            <p class="text-sm text-slate-300">
+              <strong>Export</strong> &mdash; Downloads a JSON file with all current settings and auth tokens.
+            </p>
+            <p class="text-xs text-slate-500">Keep this file secure &mdash; it contains sensitive tokens.</p>
+          </div>
+          <button
+            id="export-settings-btn"
+            type="button"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 transition-colors text-white text-sm font-medium whitespace-nowrap"
+          >
+            <i class="fa-solid fa-download"></i>
+            Export Settings
+          </button>
+        </div>
+
+        <div class="rounded-lg border border-slate-700 bg-slate-900 px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div class="flex-1 space-y-1">
+            <p class="text-sm text-slate-300">
+              <strong>Import</strong> &mdash; Restore settings from a previously exported JSON file.
+            </p>
+            <p class="text-xs text-slate-500">Auth token changes require a server restart. Environment variables will still take priority.</p>
+          </div>
+          <label
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-white text-sm font-medium whitespace-nowrap cursor-pointer"
+          >
+            <i class="fa-solid fa-upload"></i>
+            Import Settings
+            <input id="import-settings-file" type="file" accept=".json,application/json" class="hidden" />
+          </label>
+        </div>
+
+        <p id="export-import-message" class="hidden text-sm rounded-lg px-3 py-2 border"></p>
+      </section>
+
       <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
           <div>

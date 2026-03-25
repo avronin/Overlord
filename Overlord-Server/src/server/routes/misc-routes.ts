@@ -1,6 +1,6 @@
 import { authenticateRequest } from "../../auth";
 import { AuditAction, getAuditLogs, logAudit } from "../../auditLog";
-import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig } from "../../config";
+import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig, getExportableConfig, importFullConfig } from "../../config";
 import { getClientMetricsSummary } from "../../db";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
@@ -395,6 +395,84 @@ export async function handleMiscRoutes(
       { source: deps.tlsSource || "unknown" },
       { headers: { "Content-Type": "application/json", ...deps.CORS_HEADERS } },
     );
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/settings/export") {
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
+    }
+
+    const exportData = getExportableConfig(deps.SERVER_VERSION);
+
+    logAudit({
+      timestamp: Date.now(),
+      username: user.username,
+      ip: deps.requestIP?.(req)?.address || "unknown",
+      action: AuditAction.COMMAND,
+      details: "Exported settings",
+      success: true,
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return new Response(JSON.stringify(exportData, null, 2), {
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": `attachment; filename="overlord-settings-${dateStr}.json"`,
+        ...deps.CORS_HEADERS,
+      },
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/settings/import") {
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
+    }
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    if (!body || typeof body !== "object") {
+      return Response.json({ error: "Expected a JSON object" }, { status: 400 });
+    }
+
+    try {
+      const result = await importFullConfig(body);
+
+      logAudit({
+        timestamp: Date.now(),
+        username: user.username,
+        ip: deps.requestIP?.(req)?.address || "unknown",
+        action: AuditAction.COMMAND,
+        details: `Imported settings: ${result.applied.join(", ") || "none"}`,
+        success: true,
+      });
+
+      return Response.json({ ok: true, applied: result.applied, warnings: result.warnings }, { headers: deps.CORS_HEADERS });
+    } catch (error: any) {
+      logAudit({
+        timestamp: Date.now(),
+        username: user.username,
+        ip: deps.requestIP?.(req)?.address || "unknown",
+        action: AuditAction.COMMAND,
+        details: "Settings import failed",
+        success: false,
+        errorMessage: String(error?.message || error),
+      });
+
+      return Response.json({ ok: false, error: String(error?.message || "Import failed") }, { status: 400, headers: deps.CORS_HEADERS });
+    }
   }
 
   if (url.pathname === "/api/settings/appearance") {

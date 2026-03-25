@@ -61,6 +61,11 @@ const appearancePermissionNote = document.getElementById("appearance-permission-
 const appearanceSaveBtn = document.getElementById("appearance-save-btn");
 const appearanceCustomCssInput = document.getElementById("appearance-custom-css");
 
+const exportImportSection = document.getElementById("export-import-section");
+const exportSettingsBtn = document.getElementById("export-settings-btn");
+const importSettingsFile = document.getElementById("import-settings-file");
+const exportImportMessage = document.getElementById("export-import-message");
+
 let currentUser = null;
 let securityConfig = null;
 let tlsConfig = null;
@@ -665,10 +670,119 @@ async function saveAppearanceSettings(event) {
   showMessage("Custom CSS saved. Reload the page to apply the new styles.");
 }
 
+function showExportImportMessage(text, type = "ok") {
+  if (!exportImportMessage) return;
+  exportImportMessage.textContent = text;
+  exportImportMessage.classList.remove(
+    "hidden",
+    "text-emerald-200", "border-emerald-700", "bg-emerald-900/30",
+    "text-rose-200", "border-rose-700", "bg-rose-900/30",
+    "text-amber-200", "border-amber-700", "bg-amber-900/30",
+  );
+
+  if (type === "error") {
+    exportImportMessage.classList.add("text-rose-200", "border-rose-700", "bg-rose-900/30");
+  } else if (type === "warning") {
+    exportImportMessage.classList.add("text-amber-200", "border-amber-700", "bg-amber-900/30");
+  } else {
+    exportImportMessage.classList.add("text-emerald-200", "border-emerald-700", "bg-emerald-900/30");
+  }
+}
+
+async function exportSettings() {
+  try {
+    const res = await fetch("/api/settings/export", { credentials: "include" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showExportImportMessage(data.error || "Failed to export settings.", "error");
+      return;
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch ? filenameMatch[1] : "overlord-settings.json";
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showExportImportMessage("Settings exported successfully.");
+  } catch (error) {
+    showExportImportMessage(`Export failed: ${String(error?.message || error)}`, "error");
+  }
+}
+
+async function importSettings(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  event.target.value = "";
+
+  if (file.size > 512 * 1024) {
+    showExportImportMessage("File too large (max 512 KB).", "error");
+    return;
+  }
+
+  let data;
+  try {
+    const text = await file.text();
+    data = JSON.parse(text);
+  } catch {
+    showExportImportMessage("Invalid JSON file.", "error");
+    return;
+  }
+
+  if (!data || typeof data !== "object") {
+    showExportImportMessage("File does not contain a valid settings object.", "error");
+    return;
+  }
+
+  if (!confirm("Import settings from this file? This will overwrite your current configuration.")) {
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/settings/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showExportImportMessage(result.error || "Import failed.", "error");
+      return;
+    }
+
+    const appliedStr = result.applied?.length ? result.applied.join(", ") : "nothing";
+    const warningStr = result.warnings?.length ? " \u26A0 " + result.warnings.join(" ") : "";
+    const msgType = result.warnings?.length ? "warning" : "ok";
+    showExportImportMessage(`Imported: ${appliedStr}.${warningStr}`, msgType);
+
+    await loadSecurityPolicy();
+    await loadTlsSettings();
+    await loadAppearanceSettings();
+  } catch (error) {
+    showExportImportMessage(`Import failed: ${String(error?.message || error)}`, "error");
+  }
+}
+
 async function init() {
   try {
     await loadCurrentUser();
     loadPrefs();
+
+    if (isAdmin(currentUser?.role) && exportImportSection) {
+      exportImportSection.classList.remove("hidden");
+    }
+
     await loadSecurityPolicy();
     await loadTlsSettings();
     await loadAppearanceSettings();
@@ -680,6 +794,8 @@ async function init() {
     tlsForm.addEventListener("submit", saveTlsSettings);
     tlsCertbotAutoBtn.addEventListener("click", runCertbotAutoSetup);
     if (appearanceForm) appearanceForm.addEventListener("submit", saveAppearanceSettings);
+    if (exportSettingsBtn) exportSettingsBtn.addEventListener("click", exportSettings);
+    if (importSettingsFile) importSettingsFile.addEventListener("change", importSettings);
     refreshBansBtn.addEventListener("click", loadBannedIps);
     bansTableBody.addEventListener("click", handleUnbanClick);
   } catch (error) {
