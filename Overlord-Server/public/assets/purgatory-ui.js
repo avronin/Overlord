@@ -1,7 +1,6 @@
 const body = document.getElementById("enrollment-body");
 const loadingRow = document.getElementById("enrollment-loading");
 const emptyEl = document.getElementById("enrollment-empty");
-const toggleEl = document.getElementById("require-approval-toggle");
 const selectAllEl = document.getElementById("select-all");
 const bulkApproveBtn = document.getElementById("bulk-approve-btn");
 const bulkDenyBtn = document.getElementById("bulk-deny-btn");
@@ -61,13 +60,6 @@ async function loadStats() {
         badge.classList.add("hidden");
       }
     }
-  } catch {}
-}
-
-async function loadSettings() {
-  try {
-    const s = await api("/api/enrollment/settings");
-    toggleEl.checked = s.requireApproval;
   } catch {}
 }
 
@@ -240,25 +232,6 @@ document.querySelectorAll(".enrollment-tab").forEach((tab) => {
       loadClients();
     }
   });
-});
-
-// ── Toggle require approval ────────────────────────────────────────
-toggleEl.addEventListener("change", async () => {
-  try {
-    await api("/api/enrollment/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requireApproval: toggleEl.checked }),
-    });
-    if (window.showToast)
-      window.showToast(
-        toggleEl.checked ? "Approval required" : "Auto-approve enabled",
-        "success",
-      );
-  } catch (e) {
-    toggleEl.checked = !toggleEl.checked;
-    if (window.showToast) window.showToast(`Failed: ${e.message}`, "error");
-  }
 });
 
 // ── Table delegation ───────────────────────────────────────────────
@@ -434,7 +407,6 @@ confirmBanBtn.addEventListener("click", async () => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────
-loadSettings();
 loadStats();
 loadClients();
 

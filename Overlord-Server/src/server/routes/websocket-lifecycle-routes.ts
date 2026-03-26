@@ -4,7 +4,6 @@ import geoip from "geoip-lite";
 import { logAudit, AuditAction } from "../../auditLog";
 import * as clientManager from "../../clientManager";
 import { clientExists, setOnlineState, upsertClientRow, getClientEnrollmentStatus, setClientEnrollmentStatus, lookupClientByPublicKey, getClientPublicKeyById } from "../../db";
-import { getConfig } from "../../config";
 import { logger } from "../../logger";
 import { metrics } from "../../metrics";
 import { decodeMessage, encodeMessage, type WireMessage } from "../../protocol";
@@ -250,8 +249,6 @@ export async function handleWebSocketMessage(
         ws.data.enrollmentNonce = undefined;
 
         const keyFingerprint = computeKeyFingerprint(publicKey);
-        const config = getConfig();
-        const requireApproval = config.enrollment?.requireApproval ?? true;
 
         const existing = lookupClientByPublicKey(publicKey);
         let enrollmentStatus: string;
@@ -260,7 +257,7 @@ export async function handleWebSocketMessage(
           enrollmentStatus = existing.enrollmentStatus;
           ws.data.clientId = existing.id;
         } else {
-          enrollmentStatus = requireApproval ? "pending" : "approved";
+          enrollmentStatus = "pending";
 
           const existingPk = getClientPublicKeyById(ws.data.clientId);
           if (existingPk && existingPk !== publicKey) {

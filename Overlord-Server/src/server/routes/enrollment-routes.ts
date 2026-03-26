@@ -1,5 +1,5 @@
 import { authenticateRequest } from "../../auth";
-import { getConfig, updateEnrollmentConfig } from "../../config";
+import { getConfig } from "../../config";
 import {
   getPendingClients,
   getEnrollmentStats,
@@ -47,37 +47,6 @@ export async function handleEnrollmentRoutes(
     return Response.json({
       requireApproval: config.enrollment?.requireApproval ?? true,
     });
-  }
-
-  // PUT /api/enrollment/settings
-  if (req.method === "PUT" && url.pathname === "/api/enrollment/settings") {
-    const user = await authenticateRequest(req);
-    if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
-
-    let body: any;
-    try {
-      body = await req.json();
-    } catch {
-      return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    }
-
-    if (typeof body?.requireApproval !== "boolean") {
-      return Response.json({ error: "requireApproval must be a boolean" }, { status: 400 });
-    }
-
-    await updateEnrollmentConfig({ requireApproval: body.requireApproval });
-
-    logAudit({
-      timestamp: Date.now(),
-      username: user.username,
-      ip: "server",
-      action: AuditAction.ENROLLMENT_SETTINGS,
-      success: true,
-      details: JSON.stringify({ enrollment: { requireApproval: body.requireApproval } }),
-    });
-
-    return Response.json({ ok: true, requireApproval: body.requireApproval });
   }
 
   // POST /api/enrollment/:id/approve
