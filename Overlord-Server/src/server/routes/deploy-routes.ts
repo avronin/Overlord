@@ -362,7 +362,7 @@ export async function handleDeployRoutes(
           type: "command",
           commandType: "agent_update",
           id: uuidv4(),
-          payload: { path: destPath, hash },
+          payload: { path: destPath, hash, hideWindow: true },
         }),
       );
 

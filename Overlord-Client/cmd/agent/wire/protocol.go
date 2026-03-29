@@ -15,6 +15,7 @@ type Hello struct {
 	BuildTag    string        `msgpack:"buildTag,omitempty"`
 	PublicKey   string        `msgpack:"publicKey,omitempty"`
 	Signature   string        `msgpack:"signature,omitempty"`
+	InMemory    bool          `msgpack:"inMemory,omitempty"`
 }
 
 type EnrollmentChallenge struct {

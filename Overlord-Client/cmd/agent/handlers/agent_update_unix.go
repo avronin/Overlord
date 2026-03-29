@@ -16,7 +16,7 @@ func samePathByOS(left string, right string) bool {
 	return filepath.Clean(left) == filepath.Clean(right)
 }
 
-func runAgentUpdate(sourcePath string, enablePersistence bool) error {
+func runAgentUpdate(sourcePath string, enablePersistence bool, hideWindow bool) error {
 	currentExe, currentErr := resolveCurrentExecutableOnDisk()
 	startupPath, startupEnabled, err := startupTargetPath(enablePersistence)
 	if err != nil {

@@ -88,6 +88,7 @@ export function handleHello(
   info.user = payload.user;
   info.monitors = payload.monitors;
   info.monitorInfo = (payload as any).monitorInfo || info.monitorInfo;
+  info.inMemory = !!(payload as any).inMemory;
   const geo = ip ? geoip.lookup(ip) : undefined;
   const countryRaw =
     geo?.country || (payload as any).country || info.country || "ZZ";

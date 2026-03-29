@@ -512,11 +512,19 @@
               </div>
 
               <!-- Build Button -->
-              <button type="submit" id="build-btn"
-                class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                <i class="fa-solid fa-hammer"></i>
-                <span>Start Build</span>
-              </button>
+              <div class="flex gap-2">
+                <button type="submit" id="build-btn"
+                  class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <i class="fa-solid fa-hammer"></i>
+                  <span>Start Build</span>
+                </button>
+
+                <button type="button" id="build-update-all-btn"
+                  class="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                  <span>Build &amp; Update All</span>
+                </button>
+              </div>
             </form>
           </div>
 
@@ -550,6 +558,32 @@
         </div>
       </div>
     </main>
+
+    <!-- Build & Update All Confirmation Modal -->
+    <div id="update-all-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-amber-900/50 border border-amber-700 flex items-center justify-center">
+            <i class="fa-solid fa-arrow-up-from-bracket text-amber-400"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-white">Build &amp; Update All Clients</h3>
+        </div>
+        <div id="update-all-modal-body" class="text-slate-300 text-sm mb-6 space-y-2">
+          <p>Checking eligible clients...</p>
+        </div>
+        <div class="flex items-center justify-end gap-3">
+          <button id="update-all-cancel" type="button"
+            class="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors text-sm font-medium">
+            Cancel
+          </button>
+          <button id="update-all-confirm" type="button"
+            class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-hammer mr-1"></i> Build &amp; Update
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/assets/nav.js"></script>
     <script type="module" src="/assets/build.js"></script>
   </body>

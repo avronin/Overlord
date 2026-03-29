@@ -1,13 +1,19 @@
+import { createHash } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "../../auth";
 import { AuditAction, logAudit } from "../../auditLog";
 import * as buildManager from "../../build/buildManager";
+import * as clientManager from "../../clientManager";
 import { deleteBuild, getAllBuilds, getBuild } from "../../db";
+import { encodeMessage } from "../../protocol";
+import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
 import { logger } from "../../logger";
+import { normalizeClientOs } from "../deploy-utils";
 import path from "path";
 import fs from "fs";
 import { resolveRuntimeRoot } from "../runtime-paths";
+import { createUploadPull } from "./file-download-routes";
 
 type RequestIpProvider = {
   requestIP: (req: Request) => { address?: string } | null | undefined;
@@ -435,6 +441,232 @@ export async function handleBuildRoutes(
           "Content-Type": "application/octet-stream",
           "Content-Disposition": `attachment; filename="${fileName}"`,
         },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/build/update-eligible") {
+      requirePermission(user, "clients:build");
+
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch {
+        return new Response("Bad request", { status: 400 });
+      }
+
+      // Accept either a buildId (check existing build files) or platforms array (pre-build check)
+      const buildId = typeof body?.buildId === "string" ? body.buildId : "";
+      const platforms: string[] = Array.isArray(body?.platforms) ? body.platforms.filter((p: any) => typeof p === "string") : [];
+
+      let targetPlatforms: Set<string>;
+
+      if (buildId) {
+        const build = buildManager.getBuildStream(buildId);
+        const dbBuild = !build ? getBuild(buildId) : null;
+        const files = build?.files ?? dbBuild?.files;
+        if (!files || files.length === 0) {
+          return Response.json({ error: "Build not found or has no files" }, { status: 404 });
+        }
+
+        const rootDir = resolveRuntimeRoot();
+        const distRoot = path.resolve(rootDir, "dist-clients");
+
+        targetPlatforms = new Set<string>();
+        for (const f of files as any[]) {
+          const platform = (f as any).platform as string | undefined;
+          const filename = f.filename || f.name;
+          if (!platform || !filename) continue;
+          const filePath = path.resolve(distRoot, filename);
+          if (fs.existsSync(filePath)) {
+            targetPlatforms.add(platform);
+          }
+        }
+      } else if (platforms.length > 0) {
+        targetPlatforms = new Set(platforms);
+      } else {
+        return Response.json({ error: "Missing buildId or platforms" }, { status: 400 });
+      }
+
+      if (targetPlatforms.size === 0) {
+        return Response.json({ error: "No matching platforms found" }, { status: 404 });
+      }
+
+      const onlineClients = clientManager.getOnlineClients();
+      let eligible = 0;
+      let skippedInMemory = 0;
+      let skippedNoMatch = 0;
+
+      for (const client of onlineClients) {
+        if (client.inMemory) {
+          skippedInMemory++;
+          continue;
+        }
+        const clientOs = client.os?.toLowerCase() || "";
+        const clientArch = client.arch?.toLowerCase() || "";
+        const clientPlatform = `${clientOs}-${clientArch}`;
+        if (!targetPlatforms.has(clientPlatform)) {
+          skippedNoMatch++;
+          continue;
+        }
+        eligible++;
+      }
+
+      return Response.json({
+        eligible,
+        skippedInMemory,
+        skippedNoMatch,
+        totalOnline: onlineClients.length,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/build/update-all") {
+      requirePermission(user, "clients:build");
+      if (user.role !== "admin") {
+        return new Response("Forbidden: Admin access required", { status: 403 });
+      }
+
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch {
+        return new Response("Bad request", { status: 400 });
+      }
+
+      const buildId = typeof body?.buildId === "string" ? body.buildId : "";
+      if (!buildId) {
+        return Response.json({ error: "Missing buildId" }, { status: 400 });
+      }
+
+      const build = buildManager.getBuildStream(buildId);
+      const dbBuild = !build ? getBuild(buildId) : null;
+      const files = build?.files ?? dbBuild?.files;
+      if (!files || files.length === 0) {
+        return Response.json({ error: "Build not found or has no files" }, { status: 404 });
+      }
+
+      const rootDir = resolveRuntimeRoot();
+      const distRoot = path.resolve(rootDir, "dist-clients");
+
+      const hideWindow = body?.hideWindow === true;
+
+      const buildPlatforms = new Map<string, { filename: string; filePath: string; size: number }>();
+      for (const f of files as any[]) {
+        const platform = (f as any).platform as string | undefined;
+        const filename = f.filename || f.name;
+        if (!platform || !filename) continue;
+        const filePath = path.resolve(distRoot, filename);
+        const rootWithSep = distRoot.endsWith(path.sep) ? distRoot : `${distRoot}${path.sep}`;
+        if (!filePath.startsWith(rootWithSep)) continue;
+        if (!fs.existsSync(filePath)) continue;
+        const stat = fs.statSync(filePath);
+        buildPlatforms.set(platform, { filename, filePath, size: stat.size });
+      }
+
+      if (buildPlatforms.size === 0) {
+        return Response.json({ error: "No build files found on disk" }, { status: 404 });
+      }
+
+      // Pre-compute hashes per platform (avoid re-reading per client)
+      const platformHashes = new Map<string, string>();
+      for (const [platform, buildFile] of buildPlatforms) {
+        const fileBytes = new Uint8Array(fs.readFileSync(buildFile.filePath));
+        platformHashes.set(platform, createHash("sha256").update(fileBytes).digest("hex"));
+      }
+
+      const onlineClients = clientManager.getOnlineClients();
+      const results: Array<{ clientId: string; ok: boolean; reason?: string }> = [];
+
+      for (const client of onlineClients) {
+        if (client.inMemory) {
+          results.push({ clientId: client.id, ok: false, reason: "in_memory" });
+          continue;
+        }
+        if (!client.ws) {
+          results.push({ clientId: client.id, ok: false, reason: "no_ws" });
+          continue;
+        }
+
+        const clientOs = client.os?.toLowerCase() || "";
+        const clientArch = client.arch?.toLowerCase() || "";
+        const clientPlatform = `${clientOs}-${clientArch}`;
+        const buildFile = buildPlatforms.get(clientPlatform);
+        if (!buildFile) {
+          results.push({ clientId: client.id, ok: false, reason: "no_matching_build" });
+          continue;
+        }
+
+        try {
+          const fileHash = platformHashes.get(clientPlatform)!;
+          const clientNormOs = normalizeClientOs(client.os);
+          const destDir = clientNormOs === "windows"
+            ? `C:\\Windows\\Temp\\Overlord\\update-${buildId.substring(0, 8)}`
+            : `/tmp/overlord/update-${buildId.substring(0, 8)}`;
+          const destPath = clientNormOs === "windows"
+            ? `${destDir}\\${buildFile.filename}`
+            : `${destDir}/${buildFile.filename}`;
+
+          const pullId = createUploadPull({
+            clientId: client.id,
+            filePath: buildFile.filePath,
+            fileName: buildFile.filename,
+            size: buildFile.size,
+          });
+          const pullUrl = `${url.origin}/api/file/upload/pull/${encodeURIComponent(pullId)}`;
+
+          client.ws.send(
+            encodeMessage({
+              type: "command",
+              commandType: "file_upload_http",
+              id: uuidv4(),
+              payload: { path: destPath, url: pullUrl, total: buildFile.size },
+            }),
+          );
+
+          if (clientNormOs !== "windows") {
+            client.ws.send(
+              encodeMessage({
+                type: "command",
+                commandType: "file_chmod",
+                id: uuidv4(),
+                payload: { path: destPath, mode: "0755" },
+              }),
+            );
+          }
+
+          client.ws.send(
+            encodeMessage({
+              type: "command",
+              commandType: "agent_update",
+              id: uuidv4(),
+              payload: { path: destPath, hash: fileHash, hideWindow },
+            }),
+          );
+
+          metrics.recordCommand("agent_update");
+          results.push({ clientId: client.id, ok: true });
+        } catch (err: any) {
+          results.push({ clientId: client.id, ok: false, reason: err?.message || "unknown_error" });
+        }
+      }
+
+      const successCount = results.filter((r) => r.ok).length;
+      const ip = server.requestIP(req)?.address || "unknown";
+      logAudit({
+        timestamp: Date.now(),
+        username: user.username,
+        ip,
+        action: AuditAction.AGENT_UPDATE,
+        success: true,
+        details: `update-all: ${successCount}/${onlineClients.length} clients updated from build ${buildId.substring(0, 8)}`,
+      });
+
+      logger.info(`[build:update-all] ${user.username} updated ${successCount}/${onlineClients.length} clients from build ${buildId.substring(0, 8)}`);
+
+      return Response.json({
+        ok: true,
+        totalOnline: onlineClients.length,
+        successCount,
+        results,
       });
     }
 

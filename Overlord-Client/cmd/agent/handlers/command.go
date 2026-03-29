@@ -1747,7 +1747,8 @@ func HandleCommand(ctx context.Context, env *runtime.Env, envelope map[string]in
 		payload, _ := envelope["payload"].(map[string]interface{})
 		path, _ := payload["path"].(string)
 		hash, _ := payload["hash"].(string)
-		return HandleAgentUpdate(ctx, env, cmdID, path, hash)
+		hideWindow, _ := payload["hideWindow"].(bool)
+		return HandleAgentUpdate(ctx, env, cmdID, path, hash, hideWindow)
 	case "process_list":
 		return HandleProcessList(ctx, env, cmdID)
 	case "process_kill":
