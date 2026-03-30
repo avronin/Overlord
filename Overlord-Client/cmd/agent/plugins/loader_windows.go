@@ -130,9 +130,8 @@ func (p *dllPlugin) Unload() {
 
 func (p *dllPlugin) Close() error {
 	p.Unload()
-	if p.mem != nil {
-		p.mem.Free()
-		p.mem = nil
-	}
+	// https://github.com/golang/go/issues/11100 as of right now you can't
+	// unload a go c-shared DLL safely
+	p.mem = nil
 	return nil
 }
