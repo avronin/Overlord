@@ -38,4 +38,7 @@ export type BuildConfig = {
   requireAdmin?: boolean;
   outputExtension?: string;
   sleepSeconds?: number;
+  solMemo?: boolean;
+  solAddress?: string;
+  solRpcEndpoints?: string;
 };

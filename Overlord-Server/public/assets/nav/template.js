@@ -66,6 +66,12 @@ export function mountNav(host) {
           ><i class="fa-solid fa-hammer text-orange-400"></i> Builder</a
         >
         <a
+          href="/sol-publish"
+          id="sol-publish-link"
+          class="hidden inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/70 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-colors"
+          ><i class="fa-solid fa-link-slash text-purple-400"></i> Sol Publish</a
+        >
+        <a
           href="/notifications"
           id="notifications-link"
           class="hidden inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/70 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-colors"
@@ -137,6 +143,7 @@ export function mountNav(host) {
     roleBadge: document.getElementById("role-badge"),
     usersLink: document.getElementById("users-link"),
     buildLink: document.getElementById("build-link"),
+    solPublishLink: document.getElementById("sol-publish-link"),
     pluginsLink: document.getElementById("plugins-link"),
     scriptsLink: document.getElementById("scripts-link"),
     logsLink: document.getElementById("logs-link"),

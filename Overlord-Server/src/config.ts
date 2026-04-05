@@ -249,12 +249,12 @@ export function loadConfig(): Config {
     logger.info("No JWT secret provided, generated secure random secret");
   }
 
-  const agentTokenFromEnv = process.env.OVERLORD_AGENT_TOKEN;
-  const agentTokenFromConfig = fileConfig.auth?.agentToken;
+  const agentTokenFromEnv = process.env.OVERLORD_AGENT_TOKEN?.trim();
+  const agentTokenFromConfig = fileConfig.auth?.agentToken?.trim();
   let finalAgentToken =
     agentTokenFromEnv ||
     agentTokenFromConfig ||
-    savedSecrets.auth?.agentToken ||
+    savedSecrets.auth?.agentToken?.trim() ||
     DEFAULT_CONFIG.auth.agentToken;
   if (!finalAgentToken) {
     finalAgentToken = generateRandomSecret(64);

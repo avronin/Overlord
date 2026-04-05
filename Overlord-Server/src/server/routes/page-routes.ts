@@ -71,6 +71,7 @@ const STATIC_PAGES: StaticPageDef[] = [
   { path: "/users",              file: "users.html",               access: "admin",            checkPasswordChange: true },
   { path: "/user-client-access", file: "user-client-access.html",  access: "admin",            checkPasswordChange: true },
   { path: "/build",              file: "build.html",               access: "admin-or-operator" },
+  { path: "/sol-publish",        file: "sol-publish.html",         access: "admin" },
   { path: "/plugins",            file: "plugins.html",             access: "admin-or-operator" },
   { path: "/scripts",            file: "scripts.html",             access: "no-viewer" },
   { path: "/deploy",             file: "deploy.html",              access: "admin" },

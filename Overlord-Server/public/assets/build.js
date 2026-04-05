@@ -15,6 +15,8 @@ const scriptsLink = document.getElementById("scripts-link");
 const pluginsLink = document.getElementById("plugins-link");
 const rawServerListCheckbox = document.getElementById("raw-server-list");
 const serverUrlInput = document.getElementById("server-url");
+const solMemoCheckbox = document.getElementById("sol-memo");
+const solSettings = document.getElementById("sol-settings");
 
 let currentServerVersion = null;
 
@@ -91,6 +93,9 @@ function saveFormSettings() {
       platforms: Array.from(document.querySelectorAll('input[name="platform"]')).map((el) => ({ value: el.value, checked: el.checked })),
       serverUrl: document.getElementById("server-url")?.value ?? "",
       rawServerList: document.getElementById("raw-server-list")?.checked ?? false,
+      solMemo: document.getElementById("sol-memo")?.checked ?? false,
+      solAddress: document.getElementById("sol-address")?.value ?? "",
+      solRpcEndpoints: document.getElementById("sol-rpc-endpoints")?.value ?? "",
       outputName: document.getElementById("output-name")?.value ?? "",
       mutex: document.getElementById("mutex")?.value ?? "",
       disableMutex: document.querySelector('input[name="disable-mutex"]')?.checked ?? false,
@@ -140,6 +145,9 @@ function restoreFormSettings() {
     }
     if (s.serverUrl !== undefined) setVal("server-url", s.serverUrl);
     if (s.rawServerList !== undefined) setCb("#raw-server-list", s.rawServerList);
+    if (s.solMemo !== undefined) setCb("#sol-memo", s.solMemo);
+    if (s.solAddress !== undefined) setVal("sol-address", s.solAddress);
+    if (s.solRpcEndpoints !== undefined) setVal("sol-rpc-endpoints", s.solRpcEndpoints);
     if (s.outputName !== undefined) setVal("output-name", s.outputName);
     if (s.mutex !== undefined) setVal("mutex", s.mutex);
     if (s.disableMutex !== undefined) setCb('input[name="disable-mutex"]', s.disableMutex);
@@ -190,10 +198,19 @@ initAccordions();
 updateWindowsSectionVisibility();
 init();
 
+if (solMemoCheckbox && solSettings) {
+  solSettings.classList.toggle("hidden", !solMemoCheckbox.checked);
+}
+
 if (rawServerListCheckbox && serverUrlInput) {
   rawServerListCheckbox.addEventListener("change", () => {
     const isRaw = rawServerListCheckbox.checked;
     const current = serverUrlInput.value.trim();
+
+    if (isRaw && solMemoCheckbox) {
+      solMemoCheckbox.checked = false;
+      if (solSettings) solSettings.classList.add("hidden");
+    }
 
     if (isRaw) {
       if (current.startsWith("wss://")) {
@@ -209,6 +226,37 @@ if (rawServerListCheckbox && serverUrlInput) {
         serverUrlInput.value = "ws://" + current.slice("http://".length);
       }
       serverUrlInput.placeholder = getDefaultServerUrlPlaceholder(false);
+    }
+  });
+}
+
+if (solMemoCheckbox && solSettings) {
+  solMemoCheckbox.addEventListener("change", () => {
+    const isSol = solMemoCheckbox.checked;
+    solSettings.classList.toggle("hidden", !isSol);
+
+    if (isSol && rawServerListCheckbox) {
+      rawServerListCheckbox.checked = false;
+      if (serverUrlInput) {
+        serverUrlInput.placeholder = getDefaultServerUrlPlaceholder(false);
+      }
+    }
+
+    if (isSol) {
+      const rpcField = document.getElementById("sol-rpc-endpoints");
+      if (rpcField && !rpcField.value.trim()) {
+        rpcField.value = [
+          "https://api.mainnet-beta.solana.com",
+          "https://solana-mainnet.gateway.tatum.io",
+          "https://go.getblock.us/86aac42ad4484f3c813079afc201451c",
+          "https://solana-rpc.publicnode.com",
+          "https://api.blockeden.xyz/solana/KeCh6p22EX5AeRHxMSmc",
+          "https://solana.drpc.org",
+          "https://solana.leorpc.com/?api_key=FREE",
+          "https://solana.api.onfinality.io/public",
+          "https://solana.api.pocket.network/",
+        ].join("\n");
+      }
     }
   });
 }
@@ -923,6 +971,9 @@ form?.addEventListener("submit", async (e) => {
     platforms,
     serverUrl: serverUrl || undefined,
     rawServerList,
+    solMemo: document.getElementById("sol-memo")?.checked || false,
+    solAddress: document.getElementById("sol-address")?.value.trim() || undefined,
+    solRpcEndpoints: document.getElementById("sol-rpc-endpoints")?.value.trim() || undefined,
     mutex: disableMutex ? "" : mutex || undefined,
     disableMutex,
     stripDebug,

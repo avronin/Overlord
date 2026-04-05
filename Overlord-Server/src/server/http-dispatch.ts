@@ -40,6 +40,7 @@ type HttpDispatchDeps<
   handleAutoScriptsRoutes: RouteHandler;
   handleAutoDeployRoutes: RouteHandlerWithDeps<TAutoDeploy>;
   handleEnrollmentRoutes: RouteHandler;
+  handleSolRoutes: RouteHandler;
   handleUsersRoutes: RouteHandlerWithServer<TServer>;
   handleBuildRoutes: RouteHandlerWithServerDeps<TServer, TBuild>;
   handleDeployRoutes: RouteHandlerWithServerDeps<TServer, TDeploy>;
@@ -121,6 +122,9 @@ export function createHttpFetchHandler<
 
       const enrollmentResponse = await deps.handleEnrollmentRoutes(req, url);
       if (enrollmentResponse) return enrollmentResponse;
+
+      const solResponse = await deps.handleSolRoutes(req, url);
+      if (solResponse) return solResponse;
 
       const usersResponse = await deps.handleUsersRoutes(req, url, routeServer);
       if (usersResponse) return usersResponse;

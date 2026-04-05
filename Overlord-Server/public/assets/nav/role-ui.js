@@ -4,6 +4,7 @@ export function applyUserRoleUI(user, refs) {
     roleBadge,
     usersLink,
     buildLink,
+    solPublishLink,
     pluginsLink,
     scriptsLink,
     logsLink,
@@ -67,6 +68,7 @@ export function applyUserRoleUI(user, refs) {
     usersLink?.classList.remove("hidden");
     pluginsLink?.classList.remove("hidden");
     logsLink?.classList.remove("hidden");
+    solPublishLink?.classList.remove("hidden");
   }
   if (user.role === "admin" || user.role === "operator") {
     buildLink?.classList.remove("hidden");

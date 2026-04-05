@@ -26,6 +26,7 @@ if (host) {
     "/socks5-manager": "socks5-link",
     "/plugins": "plugins-link",
     "/build": "build-link",
+    "/sol-publish": "sol-publish-link",
     "/users": "users-link",
     "/user-client-access": "users-link",
     "/notifications": "notifications-link",

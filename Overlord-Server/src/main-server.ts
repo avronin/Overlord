@@ -19,6 +19,7 @@ import { handleAuthRoutes } from "./server/routes/auth-routes";
 import { handleAutoScriptsRoutes } from "./server/routes/auto-scripts-routes";
 import { handleEnrollmentRoutes, setPostApproveHook } from "./server/routes/enrollment-routes";
 import { handleBuildRoutes } from "./server/routes/build-routes";
+import { handleSolRoutes } from "./server/routes/sol-routes";
 import { handleAssetsRoutes } from "./server/routes/assets-routes";
 import { handleDeployRoutes } from "./server/routes/deploy-routes";
 import { handleWinRERoutes } from "./server/routes/winre-routes";
@@ -552,6 +553,7 @@ async function startServer() {
       handleAutoScriptsRoutes,
       handleAutoDeployRoutes,
       handleEnrollmentRoutes,
+      handleSolRoutes,
       handleUsersRoutes,
       handleBuildRoutes,
       handleDeployRoutes,
