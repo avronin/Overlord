@@ -1215,16 +1215,31 @@ export function lookupClientByPublicKey(
   return { id: row.id, enrollmentStatus: row.enrollment_status };
 }
 
-export function getEnrollmentStats(): {
+export function getEnrollmentStats(opts?: {
+  allowedClientIds?: string[];
+  deniedClientIds?: string[];
+}): {
   pending: number;
   approved: number;
   denied: number;
 } {
-  const rows = db
-    .query<{ status: string; c: number }>(
-      `SELECT COALESCE(enrollment_status,'pending') as status, COUNT(*) as c FROM clients GROUP BY enrollment_status`,
-    )
-    .all();
+  let sql = `SELECT COALESCE(enrollment_status,'pending') as status, COUNT(*) as c FROM clients`;
+  const params: any[] = [];
+
+  if (opts?.allowedClientIds) {
+    if (opts.allowedClientIds.length === 0) return { pending: 0, approved: 0, denied: 0 };
+    const placeholders = opts.allowedClientIds.map(() => "?").join(",");
+    sql += ` WHERE id IN (${placeholders})`;
+    params.push(...opts.allowedClientIds);
+  } else if (opts?.deniedClientIds && opts.deniedClientIds.length > 0) {
+    const placeholders = opts.deniedClientIds.map(() => "?").join(",");
+    sql += ` WHERE id NOT IN (${placeholders})`;
+    params.push(...opts.deniedClientIds);
+  }
+
+  sql += ` GROUP BY enrollment_status`;
+
+  const rows = db.query<{ status: string; c: number }>(sql).all(...params);
   const stats = { pending: 0, approved: 0, denied: 0 };
   for (const r of rows) {
     if (r.status === "approved") stats.approved = Number(r.c);
@@ -1287,7 +1302,10 @@ export function getAllPushSubscriptions(): PushSubscriptionRecord[] {
     }));
 }
 
-export function getPendingClients(): {
+export function getPendingClients(opts?: {
+  allowedClientIds?: string[];
+  deniedClientIds?: string[];
+}): {
   id: string;
   host: string | null;
   os: string | null;
@@ -1298,12 +1316,26 @@ export function getPendingClients(): {
   keyFingerprint: string | null;
   lastSeen: number;
 }[] {
+  let sql = `SELECT id, host, os, user, ip, country, public_key as publicKey, key_fingerprint as keyFingerprint, last_seen as lastSeen
+       FROM clients WHERE (enrollment_status='pending' OR enrollment_status IS NULL)`;
+  const params: any[] = [];
+
+  if (opts?.allowedClientIds) {
+    if (opts.allowedClientIds.length === 0) return [];
+    const placeholders = opts.allowedClientIds.map(() => "?").join(",");
+    sql += ` AND id IN (${placeholders})`;
+    params.push(...opts.allowedClientIds);
+  } else if (opts?.deniedClientIds && opts.deniedClientIds.length > 0) {
+    const placeholders = opts.deniedClientIds.map(() => "?").join(",");
+    sql += ` AND id NOT IN (${placeholders})`;
+    params.push(...opts.deniedClientIds);
+  }
+
+  sql += ` ORDER BY last_seen DESC`;
+
   return db
-    .query<any>(
-      `SELECT id, host, os, user, ip, country, public_key as publicKey, key_fingerprint as keyFingerprint, last_seen as lastSeen
-       FROM clients WHERE enrollment_status='pending' OR enrollment_status IS NULL ORDER BY last_seen DESC`,
-    )
-    .all()
+    .query<any>(sql)
+    .all(...params)
     .map((r: any) => ({
       id: r.id,
       host: r.host,

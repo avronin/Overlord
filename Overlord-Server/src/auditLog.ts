@@ -102,6 +102,8 @@ export interface AuditLogFilters {
   startDate?: number;
   endDate?: number;
   successOnly?: boolean;
+  allowedClientIds?: string[];
+  deniedClientIds?: string[];
 }
 
 export function logAudit(entry: AuditLogEntry): void {
@@ -214,6 +216,19 @@ export function getAuditLogs(filters: AuditLogFilters = {}): {
 
   if (filters.successOnly) {
     where.push("success = 1");
+  }
+
+  if (filters.allowedClientIds) {
+    if (filters.allowedClientIds.length === 0) {
+      return { logs: [], total: 0, page, pageSize };
+    }
+    const placeholders = filters.allowedClientIds.map(() => "?").join(",");
+    where.push(`(target_client_id IN (${placeholders}) OR target_client_id IS NULL)`);
+    params.push(...filters.allowedClientIds);
+  } else if (filters.deniedClientIds && filters.deniedClientIds.length > 0) {
+    const placeholders = filters.deniedClientIds.map(() => "?").join(",");
+    where.push(`(target_client_id NOT IN (${placeholders}) OR target_client_id IS NULL)`);
+    params.push(...filters.deniedClientIds);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";

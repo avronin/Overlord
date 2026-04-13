@@ -14,6 +14,25 @@ import {
 import { logAudit, AuditAction } from "../../auditLog";
 import * as clientManager from "../../clientManager";
 import { setOnlineState } from "../../db";
+import {
+  canUserAccessClient,
+  getUserClientAccessScope,
+  listUserClientRuleIdsByAccess,
+} from "../../users";
+
+function getClientScopeFilters(userId: number, role: string): { allowedClientIds?: string[]; deniedClientIds?: string[] } {
+  if (role === "admin") return {};
+  const scope = getUserClientAccessScope(userId);
+  if (scope === "none") return { allowedClientIds: [] };
+  if (scope === "all") return {};
+  if (scope === "allowlist") {
+    return { allowedClientIds: listUserClientRuleIdsByAccess(userId, "allow") };
+  }
+  if (scope === "denylist") {
+    return { deniedClientIds: listUserClientRuleIdsByAccess(userId, "deny") };
+  }
+  return { allowedClientIds: [] };
+}
 
 let _postApproveHook: ((clientId: string) => void) | undefined;
 
@@ -31,7 +50,8 @@ export async function handleEnrollmentRoutes(
     if (!user) return new Response("Unauthorized", { status: 401 });
     if (user.role === "viewer") return new Response("Forbidden", { status: 403 });
 
-    const clients = getPendingClients();
+    const scopeFilters = getClientScopeFilters(user.userId, user.role);
+    const clients = getPendingClients(scopeFilters);
     return Response.json({ items: clients });
   }
 
@@ -40,7 +60,8 @@ export async function handleEnrollmentRoutes(
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
 
-    const stats = getEnrollmentStats();
+    const scopeFilters = getClientScopeFilters(user.userId, user.role);
+    const stats = getEnrollmentStats(scopeFilters);
     return Response.json(stats);
   }
 
@@ -65,6 +86,10 @@ export async function handleEnrollmentRoutes(
     const clientId = decodeURIComponent(approveMatch[1]);
     const current = getClientEnrollmentStatus(clientId);
     if (!current) return Response.json({ error: "Client not found" }, { status: 404 });
+
+    if (!canUserAccessClient(user.userId, user.role, clientId)) {
+      return new Response("Forbidden: Client access denied", { status: 403 });
+    }
 
     setClientEnrollmentStatus(clientId, "approved", user.username);
 
@@ -94,6 +119,10 @@ export async function handleEnrollmentRoutes(
     const current = getClientEnrollmentStatus(clientId);
     if (!current) return Response.json({ error: "Client not found" }, { status: 404 });
 
+    if (!canUserAccessClient(user.userId, user.role, clientId)) {
+      return new Response("Forbidden: Client access denied", { status: 403 });
+    }
+
     setClientEnrollmentStatus(clientId, "denied");
 
     logAudit({
@@ -119,6 +148,10 @@ export async function handleEnrollmentRoutes(
     const clientId = decodeURIComponent(resetMatch[1]);
     const current = getClientEnrollmentStatus(clientId);
     if (!current) return Response.json({ error: "Client not found" }, { status: 404 });
+
+    if (!canUserAccessClient(user.userId, user.role, clientId)) {
+      return new Response("Forbidden: Client access denied", { status: 403 });
+    }
 
     setClientEnrollmentStatus(clientId, "pending");
 
@@ -151,6 +184,7 @@ export async function handleEnrollmentRoutes(
     if (action === "ban-ip") {
       let banned = 0;
       for (const id of ids) {
+        if (!canUserAccessClient(user.userId, user.role, id)) continue;
         const clientIp = getClientIp(id);
         if (!clientIp) continue;
         banIp(clientIp, `Bulk banned from purgatory by ${user.username}`);
@@ -178,6 +212,7 @@ export async function handleEnrollmentRoutes(
     const status = action === "approve" ? "approved" : action === "deny" ? "denied" : "pending";
     let updated = 0;
     for (const id of ids) {
+      if (!canUserAccessClient(user.userId, user.role, id)) continue;
       const ok = setClientEnrollmentStatus(
         id,
         status as "approved" | "denied" | "pending",
@@ -214,6 +249,10 @@ export async function handleEnrollmentRoutes(
     const clientId = decodeURIComponent(banMatch[1]);
     const targetIp = getClientIp(clientId);
     if (!targetIp) return Response.json({ error: "Client IP not found" }, { status: 404 });
+
+    if (!canUserAccessClient(user.userId, user.role, clientId)) {
+      return new Response("Forbidden: Client access denied", { status: 403 });
+    }
 
     banIp(targetIp, `Banned from purgatory by ${user.username} for client ${clientId}`);
     setClientEnrollmentStatus(clientId, "denied");

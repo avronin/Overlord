@@ -357,9 +357,14 @@ export function createNotificationPluginHandlers(deps: CreateDeps) {
         safeSendViewer(session.viewer, item);
       }
 
-      void deliverWebPushClientEvent(event, info, deps.canUserAccessClient, deps.getUserRole);
-
       const externalTargets = deps.getDeliveryTargetsForClientEvent(event, info.id);
+      const pushEnabledByUser = new Map(externalTargets.map((t) => [t.userId, t.clientEventPush]));
+
+      void deliverWebPushClientEvent(event, info, deps.canUserAccessClient, deps.getUserRole, (userId) => {
+        const enabled = pushEnabledByUser.get(userId);
+        return enabled !== undefined ? enabled : true;
+      });
+
       void deliverClientEventToExternalChannels(event, info, externalTargets);
     },
 

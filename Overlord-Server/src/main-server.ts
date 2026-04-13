@@ -264,6 +264,9 @@ const deliverNotificationWithScreenshotForRecord = (record: NotificationRecord) 
         telegramBotToken: u.telegram_bot_token || "",
         telegramChatId: u.telegram_chat_id || "",
         telegramTemplate: u.telegram_template,
+        clientEventWebhook: u.client_event_webhook === 1,
+        clientEventTelegram: u.client_event_telegram === 1,
+        clientEventPush: u.client_event_push === 1,
       }));
   };
   return deliverNotificationWithScreenshot(record, getUserDeliveryTargets);
@@ -293,6 +296,9 @@ const notificationPluginHandlers = createNotificationPluginHandlers({
       telegramBotToken: u.telegram_bot_token || "",
       telegramChatId: u.telegram_chat_id || "",
       telegramTemplate: u.telegram_template,
+      clientEventWebhook: u.client_event_webhook === 1,
+      clientEventTelegram: u.client_event_telegram === 1,
+      clientEventPush: u.client_event_push === 1,
     });
     if (event === "client_purgatory") {
       return getUsersForNotificationDelivery()

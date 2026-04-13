@@ -224,6 +224,9 @@ export async function handleNotificationsConfigRoutes(
         telegram_bot_token: null,
         telegram_chat_id: null,
         telegram_template: null,
+        client_event_webhook: 1,
+        client_event_telegram: 1,
+        client_event_push: 1,
       };
       return Response.json({
         settings,
@@ -275,6 +278,15 @@ export async function handleNotificationsConfigRoutes(
       }
       if (typeof body?.telegram_template === "string") {
         patch.telegram_template = body.telegram_template.trim() || null;
+      }
+      if (typeof body?.client_event_webhook === "boolean" || typeof body?.client_event_webhook === "number") {
+        patch.client_event_webhook = body.client_event_webhook ? 1 : 0;
+      }
+      if (typeof body?.client_event_telegram === "boolean" || typeof body?.client_event_telegram === "number") {
+        patch.client_event_telegram = body.client_event_telegram ? 1 : 0;
+      }
+      if (typeof body?.client_event_push === "boolean" || typeof body?.client_event_push === "number") {
+        patch.client_event_push = body.client_event_push ? 1 : 0;
       }
 
       const result = updateUserNotificationSettings(user.userId, patch);

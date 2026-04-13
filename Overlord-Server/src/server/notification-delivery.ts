@@ -43,6 +43,9 @@ export type UserDeliveryTarget = {
   telegramBotToken: string;
   telegramChatId: string;
   telegramTemplate: string | null;
+  clientEventWebhook: boolean;
+  clientEventTelegram: boolean;
+  clientEventPush: boolean;
 };
 
 export const DEFAULT_WEBHOOK_TEMPLATE =
@@ -324,6 +327,7 @@ export async function deliverWebPushClientEvent(
   info: { id: string; host?: string; user?: string; os?: string },
   canUserAccessClient: (userId: number, userRole: string, clientId: string) => boolean,
   getUserRole: (userId: number) => string | undefined,
+  isClientEventPushEnabled?: (userId: number) => boolean,
 ): Promise<void> {
   const subs = getAllPushSubscriptions();
   if (subs.length === 0) return;
@@ -356,6 +360,7 @@ export async function deliverWebPushClientEvent(
     subs.map(async (sub) => {
       const role = getUserRole(sub.userId);
       if (!role) return;
+      if (isClientEventPushEnabled && !isClientEventPushEnabled(sub.userId)) return;
       if (event === "client_purgatory") {
         if (role !== "admin" && role !== "operator") return;
       } else if (role !== "admin") {
@@ -418,7 +423,7 @@ export async function deliverClientEventToExternalChannels(
 
   await Promise.allSettled(
     targets.map(async (target) => {
-      if (target.webhookEnabled && target.webhookUrl) {
+      if (target.webhookEnabled && target.clientEventWebhook && target.webhookUrl) {
         const url = target.webhookUrl.trim();
         if (!url) return;
         let parsed: URL;
@@ -474,7 +479,7 @@ export async function deliverClientEventToExternalChannels(
         }
       }
 
-      if (target.telegramEnabled && target.telegramBotToken && target.telegramChatId) {
+      if (target.telegramEnabled && target.clientEventTelegram && target.telegramBotToken && target.telegramChatId) {
         const token = target.telegramBotToken.trim();
         const chatId = target.telegramChatId.trim();
         if (!token || !chatId) return;

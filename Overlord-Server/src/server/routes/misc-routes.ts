@@ -4,7 +4,7 @@ import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfi
 import { getClientMetricsSummary } from "../../db";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
-import { getUserTelegramChatId, setUserTelegramChatId } from "../../users";
+import { getUserTelegramChatId, setUserTelegramChatId, getUserClientAccessScope, listUserClientRuleIdsByAccess } from "../../users";
 import { runCertbotSetup } from "../certbot-setup";
 import {
   getActiveProxies,
@@ -311,6 +311,20 @@ export async function handleMiscRoutes(
     const endDate = Number(url.searchParams.get("endDate") || 0) || undefined;
     const successOnly = url.searchParams.get("successOnly") === "true";
 
+    let allowedClientIds: string[] | undefined;
+    let deniedClientIds: string[] | undefined;
+    if (user.role !== "admin") {
+      const scope = getUserClientAccessScope(user.userId);
+      if (scope === "none") {
+        return Response.json({ logs: [], total: 0, page, pageSize }, { headers: deps.CORS_HEADERS });
+      }
+      if (scope === "allowlist") {
+        allowedClientIds = listUserClientRuleIdsByAccess(user.userId, "allow");
+      } else if (scope === "denylist") {
+        deniedClientIds = listUserClientRuleIdsByAccess(user.userId, "deny");
+      }
+    }
+
     const result = getAuditLogs({
       page,
       pageSize,
@@ -320,6 +334,8 @@ export async function handleMiscRoutes(
       startDate,
       endDate,
       successOnly,
+      allowedClientIds,
+      deniedClientIds,
     });
 
     return Response.json(result, { headers: deps.CORS_HEADERS });

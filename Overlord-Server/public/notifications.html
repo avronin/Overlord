@@ -313,6 +313,49 @@
           </div>
         </div>
 
+        <!-- Client Event Delivery Channels -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div>
+              <h2 class="text-lg font-semibold">Client Event Delivery Channels</h2>
+              <p class="text-sm text-slate-400">
+                Choose which channels receive client lifecycle events (online, offline, purgatory).
+              </p>
+            </div>
+            <button
+              id="save-event-channels"
+              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <i class="fa-solid fa-save"></i>
+              <span>Save</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <label class="flex items-center gap-3 rounded-lg bg-slate-950 border border-slate-800 px-4 py-3 cursor-pointer hover:border-slate-600 transition-colors">
+              <input id="client-event-webhook" type="checkbox" class="h-4 w-4 accent-indigo-500 shrink-0" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-slate-200 font-medium"><i class="fa-brands fa-discord mr-1"></i> Discord Webhook</span>
+                <span class="text-slate-500 text-xs">Send client events to your webhook</span>
+              </span>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg bg-slate-950 border border-slate-800 px-4 py-3 cursor-pointer hover:border-slate-600 transition-colors">
+              <input id="client-event-telegram" type="checkbox" class="h-4 w-4 accent-sky-500 shrink-0" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-slate-200 font-medium"><i class="fa-brands fa-telegram mr-1"></i> Telegram Bot</span>
+                <span class="text-slate-500 text-xs">Send client events to your Telegram</span>
+              </span>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg bg-slate-950 border border-slate-800 px-4 py-3 cursor-pointer hover:border-slate-600 transition-colors">
+              <input id="client-event-push" type="checkbox" class="h-4 w-4 accent-emerald-500 shrink-0" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-slate-200 font-medium"><i class="fa-solid fa-bell mr-1"></i> Push Notifications</span>
+                <span class="text-slate-500 text-xs">Send client events via browser push</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
         <!-- Notification feed -->
         <div
           id="notification-panel"

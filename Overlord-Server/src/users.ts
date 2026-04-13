@@ -176,6 +176,22 @@ try {
   }
 }
 
+const clientEventColumns: Array<{ sql: string; label: string }> = [
+  { sql: `ALTER TABLE users ADD COLUMN client_event_webhook INTEGER DEFAULT 1`, label: "client_event_webhook" },
+  { sql: `ALTER TABLE users ADD COLUMN client_event_telegram INTEGER DEFAULT 1`, label: "client_event_telegram" },
+  { sql: `ALTER TABLE users ADD COLUMN client_event_push INTEGER DEFAULT 1`, label: "client_event_push" },
+];
+for (const col of clientEventColumns) {
+  try {
+    db.exec(col.sql);
+    logger.info(`[users] Added ${col.label} column to existing database`);
+  } catch (err: any) {
+    if (!err.message?.includes("duplicate column name")) {
+      logger.error("[users] Migration error:", err);
+    }
+  }
+}
+
 const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as {
   count: number;
 };
@@ -569,7 +585,7 @@ export function canBuildClients(userId: number, role: UserRole): boolean {
 }
 
 export function canViewAuditLogs(role: UserRole): boolean {
-  return role === "admin";
+  return role === "admin" || role === "operator";
 }
 
 export function hasPermission(role: UserRole, permission: string, userId?: number): boolean {
@@ -661,12 +677,15 @@ export interface UserNotificationSettings {
   telegram_bot_token: string | null;
   telegram_chat_id: string | null;
   telegram_template: string | null;
+  client_event_webhook: number;
+  client_event_telegram: number;
+  client_event_push: number;
 }
 
 export function getUserNotificationSettings(userId: number): UserNotificationSettings | null {
   const row = db
     .prepare(
-      "SELECT webhook_enabled, webhook_url, webhook_template, telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_template FROM users WHERE id = ?",
+      "SELECT webhook_enabled, webhook_url, webhook_template, telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_template, client_event_webhook, client_event_telegram, client_event_push FROM users WHERE id = ?",
     )
     .get(userId) as UserNotificationSettings | undefined;
   return row ?? null;
@@ -707,6 +726,18 @@ export function updateUserNotificationSettings(
     fields.push("telegram_template = ?");
     values.push(settings.telegram_template || null);
   }
+  if ("client_event_webhook" in settings) {
+    fields.push("client_event_webhook = ?");
+    values.push(settings.client_event_webhook ? 1 : 0);
+  }
+  if ("client_event_telegram" in settings) {
+    fields.push("client_event_telegram = ?");
+    values.push(settings.client_event_telegram ? 1 : 0);
+  }
+  if ("client_event_push" in settings) {
+    fields.push("client_event_push = ?");
+    values.push(settings.client_event_push ? 1 : 0);
+  }
 
   if (fields.length === 0) return { success: true };
 
@@ -733,6 +764,9 @@ export interface UserDeliveryRow {
   telegram_bot_token: string | null;
   telegram_chat_id: string | null;
   telegram_template: string | null;
+  client_event_webhook: number;
+  client_event_telegram: number;
+  client_event_push: number;
 }
 
 export function getUsersForNotificationDelivery(): UserDeliveryRow[] {
@@ -744,7 +778,8 @@ export function getUsersForNotificationDelivery(): UserDeliveryRow[] {
     .prepare(
       `SELECT id, username, role, client_scope,
               webhook_enabled, webhook_url, webhook_template,
-              telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_template
+              telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_template,
+              client_event_webhook, client_event_telegram, client_event_push
        FROM users
        WHERE (webhook_enabled = 1 AND webhook_url IS NOT NULL AND webhook_url != '')
           OR (telegram_enabled = 1 AND telegram_bot_token IS NOT NULL AND telegram_bot_token != ''

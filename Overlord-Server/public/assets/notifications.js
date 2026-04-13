@@ -52,6 +52,11 @@ const eventNotifOfflineInput = document.getElementById("event-notif-offline");
 const eventNotifPurgatoryInput = document.getElementById("event-notif-purgatory");
 const saveEventNotifsBtn = document.getElementById("save-event-notifs");
 
+const clientEventWebhookInput = document.getElementById("client-event-webhook");
+const clientEventTelegramInput = document.getElementById("client-event-telegram");
+const clientEventPushInput = document.getElementById("client-event-push");
+const saveEventChannelsBtn = document.getElementById("save-event-channels");
+
 // Browser permission status bar
 const desktopNotifStatusBar = document.getElementById("desktop-notif-status-bar");
 const desktopNotifStatusIcon = document.getElementById("desktop-notif-status-icon");
@@ -354,6 +359,9 @@ function applyMySettings(settings) {
   if (telegramBotTokenInput) telegramBotTokenInput.value = settings.telegram_bot_token || "";
   if (telegramChatIdInput) telegramChatIdInput.value = settings.telegram_chat_id || "";
   if (telegramTemplateInput) telegramTemplateInput.value = settings.telegram_template || "";
+  if (clientEventWebhookInput) clientEventWebhookInput.checked = settings.client_event_webhook !== 0;
+  if (clientEventTelegramInput) clientEventTelegramInput.checked = settings.client_event_telegram !== 0;
+  if (clientEventPushInput) clientEventPushInput.checked = settings.client_event_push !== 0;
 }
 
 async function loadMySettings() {
@@ -676,6 +684,22 @@ function wireEventNotifSave() {
   });
 }
 
+function wireEventChannelsSave() {
+  if (!saveEventChannelsBtn) return;
+  saveEventChannelsBtn.addEventListener("click", async () => {
+    try {
+      await saveMySettings({
+        client_event_webhook: clientEventWebhookInput?.checked ?? true,
+        client_event_telegram: clientEventTelegramInput?.checked ?? true,
+        client_event_push: clientEventPushInput?.checked ?? true,
+      });
+      window.showToast?.("Event delivery channel settings saved", "success", 3000);
+    } catch (err) {
+      window.showToast?.(err?.message || "Failed to save event channel settings", "error", 4000);
+    }
+  });
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 initWebhookTemplateEditor();
 wireKeywordSave();
@@ -684,6 +708,7 @@ wireTelegramSave();
 loadMySettings();
 loadEventNotifPrefs();
 wireEventNotifSave();
+wireEventChannelsSave();
 updateDesktopPermissionUi();
 wireDesktopPermissionBtn();
 initRoleUi();

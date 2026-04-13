@@ -54,8 +54,8 @@ describe("checkPermission", () => {
     expect(checkPermission(makeUser({ role: "admin" }), "audit:view")).toBe(true);
   });
 
-  test("operator does not have audit:view", () => {
-    expect(checkPermission(makeUser({ role: "operator" }), "audit:view")).toBe(false);
+  test("operator has audit:view", () => {
+    expect(checkPermission(makeUser({ role: "operator" }), "audit:view")).toBe(true);
   });
 });
 
