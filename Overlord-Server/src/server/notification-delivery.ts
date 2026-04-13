@@ -177,6 +177,21 @@ async function deliverToUserWebhook(
     return;
   }
 
+  const hostname = parsed.hostname.toLowerCase();
+  const BLOCKED_HOSTS = ["localhost", "metadata.google.internal", "169.254.169.254"];
+  if (
+    BLOCKED_HOSTS.includes(hostname) ||
+    hostname.endsWith(".internal") ||
+    hostname.startsWith("127.") ||
+    hostname === "[::1]" ||
+    /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname) ||
+    hostname.startsWith("169.254.") ||
+    hostname.startsWith("0.")
+  ) {
+    logger.warn(`[notify] blocked webhook to private/internal address: ${hostname}`);
+    return;
+  }
+
   try {
     const isDiscord = /discord(app)?\.com$/i.test(parsed.hostname);
     if (isDiscord) {
