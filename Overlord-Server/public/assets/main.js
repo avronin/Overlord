@@ -9,6 +9,7 @@ import {
   sendCommand,
   requestPreview,
   requestThumbnail,
+  markManualDisconnect,
 } from "./data.js";
 import { initCountryPicker } from "./country-picker.js";
 
@@ -620,6 +621,7 @@ bulkDisconnectBtn?.addEventListener("click", async () => {
 
   let success = 0;
   for (const clientId of selectedClients) {
+    markManualDisconnect(clientId);
     const ok = await sendCommand(clientId, "disconnect");
     if (ok) success++;
   }
@@ -974,6 +976,10 @@ menu.addEventListener("click", async (e) => {
     closeMenu(clearContext);
     setTimeout(() => loadWithOptions({ force: true }), 5000);
     return;
+  }
+
+  if (action === "disconnect") {
+    markManualDisconnect(contextCard);
   }
 
   const ok = await sendCommand(contextCard, action);

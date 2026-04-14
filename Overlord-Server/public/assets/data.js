@@ -9,6 +9,7 @@ let render = () => {};
 let dashboardWs = null;
 let dashboardWsConnected = false;
 let wsReconnectTimer = null;
+const manuallyDisconnecting = new Set();
 
 function moveClientCardImmediately(msg) {
   const clientId = typeof msg?.clientId === "string" ? msg.clientId : "";
@@ -157,8 +158,13 @@ function connectDashboardWs() {
         return;
       }
       if (msg && msg.type === "client_event") {
-        moveClientCardImmediately(msg);
-        loadWithOptions({ force: false, reorder: true });
+        if (msg.event === "client_offline" && manuallyDisconnecting.has(msg.clientId)) {
+          manuallyDisconnecting.delete(msg.clientId);
+          loadWithOptions({ force: true });
+        } else {
+          moveClientCardImmediately(msg);
+          loadWithOptions({ force: false, reorder: true });
+        }
       }
     } catch {}
   };
@@ -203,6 +209,11 @@ export function startAutoRefresh(intervalMs = POLL_INTERVAL_MS) {
   pollTimer = setInterval(() => {
     loadWithOptions({ force: false, reorder: true });
   }, effectiveInterval);
+}
+
+export function markManualDisconnect(clientId) {
+  manuallyDisconnecting.add(clientId);
+  setTimeout(() => manuallyDisconnecting.delete(clientId), 10000);
 }
 
 export async function sendCommand(clientId, action) {
