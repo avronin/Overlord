@@ -3,7 +3,6 @@ TODO-IMPROVEMENTS.md
 upx-reference.txt
 Overlord-Desktop-Tauri\*
 plugin-clipreplace
-claude.md
 
 # Node/Bun
 node_modules/
@@ -47,10 +46,16 @@ dist-clients/*
 # Plugins
 Overlord-Server/plugins/*.zip
 Overlord-Server/plugins/.plugin-state.json
-plugin-sample-go/*.wasm
-plugin-sample-go/*.zip
-plugin-sample-go/*.h
-plugin-hrdp/*
+plugins/sample-go/*.wasm
+plugins/sample-go/*.zip
+plugins/sample-go/*.h
+plugins/hrdp/*
+plugins/netscan/
+plugins/sysprofile/
+plugins/build-netscan.bat
+plugins/build-netscan.sh
+plugins/build-sysprofile.bat
+plugins/build-sysprofile.sh
 
 # Runtime data
 Overlord-Server/data/

@@ -164,13 +164,13 @@ The `hostInfo` buffer passed to `PluginOnLoad` is JSON:
 
 ## 3) Sample plugins by language
 
-### Go (`plugin-sample-go/`)
+### Go (`sample-go/`)
 
 Go plugins use `-buildmode=c-shared` with platform-specific export wrappers.
 
 **Project structure:**
 ```
-plugin-sample-go/native/
+sample-go/native/
   ├─ main.go              (shared core logic)
   ├─ exports_unix.go      (exports for Linux/macOS)
   ├─ exports_windows.go   (exports for Windows)
@@ -213,13 +213,13 @@ CGO_ENABLED=1 go build -buildmode=c-shared -o sample-windows-amd64.dll ./native
 
 ---
 
-### C (`plugin-sample-c/`)
+### C (`sample-c/`)
 
 Pure C plugins are the simplest — no runtime, no GC, fully unloadable.
 
 **Project structure:**
 ```
-plugin-sample-c/
+sample-c/
   ├─ native/plugin.c
   ├─ sample-c.html
   ├─ sample-c.css
@@ -278,13 +278,13 @@ gcc -shared -fPIC -O2 -o sample-c-linux-amd64.so plugin.c
 
 ---
 
-### C++ (`plugin-sample-cpp/`)
+### C++ (`sample-cpp/`)
 
 C++ plugins can use the full standard library (STL containers, `std::mutex`, `std::string`, etc.) while still being fully unloadable.
 
 **Project structure:**
 ```
-plugin-sample-cpp/
+sample-cpp/
   ├─ native/plugin.cpp
   ├─ sample-cpp.html
   ├─ sample-cpp.css
@@ -310,13 +310,13 @@ g++ -shared -fPIC -O2 -o sample-cpp-linux-amd64.so plugin.cpp
 
 ---
 
-### Rust (`plugin-sample-rust/`)
+### Rust (`sample-rust/`)
 
 Rust plugins compile as `cdylib` crates. Exports use `#[no_mangle]` and `extern "C"`.
 
 **Project structure:**
 ```
-plugin-sample-rust/
+sample-rust/
   ├─ native/
   │   ├─ Cargo.toml
   │   └─ src/lib.rs
@@ -819,7 +819,7 @@ The fingerprint (64-char hex SHA-256) is printed to the console. Add it to your 
 
 ```bash
 cd Overlord-Server
-bun run scripts/plugin-sign.ts --key my-signing-key.key ../plugin-sample-go/sample.zip
+bun run scripts/plugin-sign.ts --key my-signing-key.key ../plugins/sample-go/sample.zip
 ```
 
 This injects a `signature.json` into the ZIP containing the Ed25519 public key and signature.

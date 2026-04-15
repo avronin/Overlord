@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="${1:-${ROOT_DIR}/plugin-sample-cpp}"
+PLUGIN_DIR="${1:-${ROOT_DIR}/sample-c}"
 NATIVE_DIR="${PLUGIN_DIR}/native"
-PLUGIN_NAME="sample-cpp"
+PLUGIN_NAME="sample-c"
 ZIP_OUT="${PLUGIN_DIR}/${PLUGIN_NAME}.zip"
 
-if [[ ! -f "${NATIVE_DIR}/plugin.cpp" ]]; then
-  echo "[error] native/plugin.cpp not found in ${NATIVE_DIR}" >&2
+if [[ ! -f "${NATIVE_DIR}/plugin.c" ]]; then
+  echo "[error] native/plugin.c not found in ${NATIVE_DIR}" >&2
   exit 1
 fi
 
@@ -28,29 +28,29 @@ esac
 DEFAULT_TARGETS="${HOST_OS}-${HOST_ARCH}"
 BUILD_TARGETS="${BUILD_TARGETS:-${DEFAULT_TARGETS}}"
 
-# Resolve the C++ compiler for a given target os-arch pair.
-# Override with CXX=<compiler> for custom toolchains.
-resolve_cxx() {
+# Resolve the C compiler for a given target os-arch pair.
+# Override with CC=<compiler> for custom toolchains.
+resolve_cc() {
   local t_os="$1" t_arch="$2"
 
-  # Honour explicit CXX override
-  if [[ -n "${CXX:-}" ]]; then echo "${CXX}"; return; fi
+  # Honour explicit CC override
+  if [[ -n "${CC:-}" ]]; then echo "${CC}"; return; fi
 
   # Native compilation
   if [[ "${t_os}" == "${HOST_OS}" && "${t_arch}" == "${HOST_ARCH}" ]]; then
-    echo "g++"; return
+    echo "gcc"; return
   fi
 
   # Cross-compilation
   case "${t_os}-${t_arch}" in
-    linux-amd64)    echo "x86_64-linux-gnu-g++" ;;
-    linux-arm64)    echo "aarch64-linux-gnu-g++" ;;
-    linux-arm)      echo "arm-linux-gnueabihf-g++" ;;
-    windows-amd64)  echo "x86_64-w64-mingw32-g++" ;;
-    windows-arm64)  echo "aarch64-w64-mingw32-g++" ;;
-    darwin-amd64)   echo "x86_64-apple-darwin-g++" ;;
-    darwin-arm64)   echo "aarch64-apple-darwin-g++" ;;
-    *)              echo "g++" ;;
+    linux-amd64)    echo "x86_64-linux-gnu-gcc" ;;
+    linux-arm64)    echo "aarch64-linux-gnu-gcc" ;;
+    linux-arm)      echo "arm-linux-gnueabihf-gcc" ;;
+    windows-amd64)  echo "x86_64-w64-mingw32-gcc" ;;
+    windows-arm64)  echo "aarch64-w64-mingw32-gcc" ;;
+    darwin-amd64)   echo "x86_64-apple-darwin-gcc" ;;
+    darwin-arm64)   echo "aarch64-apple-darwin-gcc" ;;
+    *)              echo "gcc" ;;
   esac
 }
 
@@ -68,15 +68,15 @@ for target in ${BUILD_TARGETS}; do
     ext="so"
   fi
 
-  cxx="$(resolve_cxx "${os}" "${arch}")"
-  if ! command -v "${cxx}" >/dev/null 2>&1; then
-    echo "[error] cross-compiler '${cxx}' not found for ${os}-${arch}. Install it or set CXX=<compiler>." >&2
+  cc="$(resolve_cc "${os}" "${arch}")"
+  if ! command -v "${cc}" >/dev/null 2>&1; then
+    echo "[error] cross-compiler '${cc}' not found for ${os}-${arch}. Install it or set CC=<compiler>." >&2
     exit 1
   fi
 
   outfile="${PLUGIN_DIR}/${PLUGIN_NAME}-${os}-${arch}.${ext}"
-  echo "[build] ${cxx} -shared -fPIC -O2 -o ${outfile} ${NATIVE_DIR}/plugin.cpp"
-  ${cxx} -shared -fPIC -O2 -o "${outfile}" "${NATIVE_DIR}/plugin.cpp"
+  echo "[build] ${cc} -shared -fPIC -O2 -o ${outfile} ${NATIVE_DIR}/plugin.c"
+  ${cc} -shared -fPIC -O2 -o "${outfile}" "${NATIVE_DIR}/plugin.c"
   BUILT_FILES+=("${PLUGIN_NAME}-${os}-${arch}.${ext}")
 done
 

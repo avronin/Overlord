@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="${1:-${ROOT_DIR}/plugin-sample-go}"
+PLUGIN_DIR="${1:-${ROOT_DIR}/sample-go}"
 NATIVE_DIR="${PLUGIN_DIR}/native"
 PLUGIN_NAME="sample"
 ZIP_OUT="${PLUGIN_DIR}/${PLUGIN_NAME}.zip"

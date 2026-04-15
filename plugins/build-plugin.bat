@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 set "ROOT=%~dp0"
-set "PLUGIN_DIR=%ROOT%plugin-sample-go"
+set "PLUGIN_DIR=%ROOT%sample-go"
 if not "%~1"=="" set "PLUGIN_DIR=%~1"
 
 set "NATIVE_DIR=%PLUGIN_DIR%\native"

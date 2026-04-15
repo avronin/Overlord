@@ -2,20 +2,24 @@
 setlocal enabledelayedexpansion
 
 set "ROOT=%~dp0"
-set "PLUGIN_DIR=%ROOT%plugin-sample-rust"
+set "PLUGIN_DIR=%ROOT%sample-c"
 if not "%~1"=="" set "PLUGIN_DIR=%~1"
 
 set "NATIVE_DIR=%PLUGIN_DIR%\native"
-set "PLUGIN_NAME=sample-rust"
+set "PLUGIN_NAME=sample-c"
 set "ZIP_OUT=%PLUGIN_DIR%\%PLUGIN_NAME%.zip"
 
-if not exist "%NATIVE_DIR%\Cargo.toml" (
-  echo [error] native\Cargo.toml not found in %NATIVE_DIR%
+if not exist "%NATIVE_DIR%\plugin.c" (
+  echo [error] native\plugin.c not found in %NATIVE_DIR%
   exit /b 1
 )
 
 REM Build targets - default to windows-amd64 on Windows
 if not defined BUILD_TARGETS set "BUILD_TARGETS=windows-amd64"
+
+REM Detect host architecture
+set "HOST_ARCH=amd64"
+if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "HOST_ARCH=arm64"
 
 set "BUILT_FILES="
 for %%T in (%BUILD_TARGETS%) do (
@@ -26,43 +30,50 @@ for %%T in (%BUILD_TARGETS%) do (
 
   if "!TARGET_OS!"=="windows" (
     set "EXT=dll"
-    set "RUST_TARGET=x86_64-pc-windows-msvc"
-    if "!TARGET_ARCH!"=="arm64" set "RUST_TARGET=aarch64-pc-windows-msvc"
   ) else if "!TARGET_OS!"=="darwin" (
     set "EXT=dylib"
-    set "RUST_TARGET=x86_64-apple-darwin"
-    if "!TARGET_ARCH!"=="arm64" set "RUST_TARGET=aarch64-apple-darwin"
   ) else (
     set "EXT=so"
-    set "RUST_TARGET=x86_64-unknown-linux-gnu"
-    if "!TARGET_ARCH!"=="arm64" set "RUST_TARGET=aarch64-unknown-linux-gnu"
   )
-
   set "OUTFILE=%PLUGIN_DIR%\%PLUGIN_NAME%-!TARGET_OS!-!TARGET_ARCH!.!EXT!"
 
-  echo [build] cargo build --release --target=!RUST_TARGET! in %NATIVE_DIR%
-  pushd "%NATIVE_DIR%"
-  cargo build --release --target=!RUST_TARGET!
-  if errorlevel 1 (
-    echo [error] build failed for !TARGET_OS!-!TARGET_ARCH!
-    popd
-    exit /b 1
-  )
-  popd
-
-  REM Cargo outputs to target/<triple>/release/ — find the cdylib
   if "!TARGET_OS!"=="windows" (
-    copy /Y "%NATIVE_DIR%\target\!RUST_TARGET!\release\sample_rust.dll" "!OUTFILE!" >nul
-  ) else if "!TARGET_OS!"=="darwin" (
-    copy /Y "%NATIVE_DIR%\target\!RUST_TARGET!\release\libsample_rust.dylib" "!OUTFILE!" >nul
+    REM Pick cross-compiler flags for MSVC or gcc
+    set "CL_MACHINE="
+    set "GCC_CMD=gcc"
+    if "!TARGET_ARCH!"=="arm64" (
+      set "CL_MACHINE=/machine:ARM64"
+      set "GCC_CMD=aarch64-w64-mingw32-gcc"
+    ) else if "!TARGET_ARCH!"=="amd64" (
+      set "CL_MACHINE=/machine:X64"
+      set "GCC_CMD=x86_64-w64-mingw32-gcc"
+    )
+
+    echo [build] cl /LD /O2 "%NATIVE_DIR%\plugin.c" /Fe:"!OUTFILE!" /link !CL_MACHINE!
+    cl /LD /O2 "%NATIVE_DIR%\plugin.c" /Fe:"!OUTFILE!" /link !CL_MACHINE! >nul 2>&1
+    if errorlevel 1 (
+      echo [build] cl failed, trying !GCC_CMD!...
+      !GCC_CMD! -shared -O2 -o "!OUTFILE!" "%NATIVE_DIR%\plugin.c"
+      if errorlevel 1 (
+        echo [error] build failed for !TARGET_OS!-!TARGET_ARCH!
+        exit /b 1
+      )
+    )
   ) else (
-    copy /Y "%NATIVE_DIR%\target\!RUST_TARGET!\release\libsample_rust.so" "!OUTFILE!" >nul
+    REM Cross-compile for non-Windows targets
+    set "GCC_CMD=gcc"
+    if "!TARGET_OS!"=="linux" (
+      if "!TARGET_ARCH!"=="arm64" set "GCC_CMD=aarch64-linux-gnu-gcc"
+      if "!TARGET_ARCH!"=="amd64" set "GCC_CMD=x86_64-linux-gnu-gcc"
+    )
+    echo [build] !GCC_CMD! -shared -fPIC -O2 -o "!OUTFILE!" "%NATIVE_DIR%\plugin.c"
+    !GCC_CMD! -shared -fPIC -O2 -o "!OUTFILE!" "%NATIVE_DIR%\plugin.c"
+    if errorlevel 1 (
+      echo [error] build failed for !TARGET_OS!-!TARGET_ARCH!
+      exit /b 1
+    )
   )
-  if errorlevel 1 (
-    echo [error] copy failed for !TARGET_OS!-!TARGET_ARCH!
-    exit /b 1
-  )
-  set "BUILT_FILES=!BUILT_FILES! '!OUTFILE!'"
+  set "BUILT_FILES=!BUILT_FILES! '%PLUGIN_DIR%\%PLUGIN_NAME%-!TARGET_OS!-!TARGET_ARCH!.!EXT!'"
 )
 
 if exist "%ZIP_OUT%" del /f /q "%ZIP_OUT%"

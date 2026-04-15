@@ -1,6 +1,6 @@
 # Sample Go Plugin (sample)
 
-This sample lives at the repo root and builds a native Go plugin.
+This sample lives in the `plugins/` directory and builds a native Go plugin.
 
 ## Files to include in the plugin zip
 
@@ -43,7 +43,7 @@ Click "Send event" and the plugin will echo back to the server logs.
 
 The plugin receives host metadata in the `init` payload. The sample plugin shows
 how to detect the host OS and branch logic (see
-`plugin-sample-go/native/main.go`). For example:
+`sample-go/native/main.go`). For example:
 
 - If `host.os == "windows"`, you can safely run Windows-only flows (e.g., WinAPI-backed behavior).
 - Otherwise, skip or provide a fallback path.
