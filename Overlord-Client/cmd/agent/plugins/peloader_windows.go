@@ -5,13 +5,12 @@ package plugins
 import (
 	"errors"
 	"fmt"
+	"overlord-client/cmd/agent/plugins/teb"
 	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
-
-func currentTEB() uintptr
 
 const (
 	imageDOSSignature = 0x5A4D     // "MZ"
@@ -453,7 +452,7 @@ func (mm *MemoryModule) setupTLS(reason uint32) {
 		}
 	}
 
-	tebAddr := currentTEB()
+	tebAddr := teb.CurrentTEB()
 	tlsArrayField := (*uintptr)(unsafe.Pointer(tebAddr + 0x58)) // ThreadLocalStoragePointer
 	oldArray := *tlsArrayField
 
@@ -537,7 +536,7 @@ func (mm *MemoryModule) SetupThreadTLS() func() {
 	}
 
 	ptrSize := unsafe.Sizeof(uintptr(0))
-	tebAddr := currentTEB()
+	tebAddr := teb.CurrentTEB()
 	tlsArrayField := (*uintptr)(unsafe.Pointer(tebAddr + 0x58))
 	oldArray := *tlsArrayField
 
@@ -571,7 +570,7 @@ func (mm *MemoryModule) SetupThreadTLS() func() {
 			*(*uintptr)(unsafe.Pointer(newArray + uintptr(mm.tlsIndex)*ptrSize)) = 0
 			_ = windows.VirtualFree(newArray, 0, windows.MEM_RELEASE)
 		}
-		tebNow := currentTEB()
+		tebNow := teb.CurrentTEB()
 		field := (*uintptr)(unsafe.Pointer(tebNow + 0x58))
 		*field = oldArray
 	}
