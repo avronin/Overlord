@@ -2,7 +2,7 @@
 TODO-IMPROVEMENTS.md
 upx-reference.txt
 Overlord-Desktop-Tauri\*
-plugin-clipreplace
+plugins/clipreplace
 
 # Node/Bun
 node_modules/
@@ -496,4 +496,3 @@ FodyWeavers.xsd
 *.exp
 *.lib
 save.txt
-CLAUDE.md
