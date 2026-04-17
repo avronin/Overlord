@@ -168,7 +168,7 @@ function buildViewerFrameBuffer(bytes: Uint8Array, header?: any): Uint8Array {
   return buf;
 }
 
-const VIEWER_BACKPRESSURE_BYTES = 4 * 1024 * 1024; // 4 MB
+const VIEWER_BACKPRESSURE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 function broadcastFrameToViewers(
   sessions: Iterable<{ viewer: ServerWebSocket<SocketData> }>,

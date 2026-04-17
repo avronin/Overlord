@@ -1,6 +1,13 @@
-import geoip from "geoip-lite";
 import { encodeMessage, decodeMessage, WireMessage } from "./protocol";
 import { Buffer } from "node:buffer";
+
+let _geoip: typeof import("geoip-lite") extends { default: infer D } ? D : never;
+async function getGeoip() {
+  if (!_geoip) {
+    _geoip = (await import("geoip-lite")).default;
+  }
+  return _geoip;
+}
 import { ClientInfo } from "./types";
 import {
   consumeThumbnailRequest,
@@ -77,7 +84,7 @@ export function clearClientSyncState(clientId: string): void {
   pendingClientDbUpdates.delete(clientId);
 }
 
-export function handleHello(
+export async function handleHello(
   info: ClientInfo,
   payload: WireMessage,
   ws: any,
@@ -103,6 +110,7 @@ export function handleHello(
   info.cpu = sanitizeInfoString((payload as any).cpu) || info.cpu;
   info.gpu = sanitizeInfoString((payload as any).gpu) || info.gpu;
   info.ram = sanitizeInfoString((payload as any).ram, 64) || info.ram;
+  const geoip = await getGeoip();
   const geo = ip ? geoip.lookup(ip) : undefined;
   const countryRaw =
     geo?.country || (payload as any).country || info.country || "ZZ";
