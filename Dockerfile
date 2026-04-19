@@ -99,8 +99,15 @@ RUN if [ -f dist-clients/HVNCCapture.x64.dll ]; then \
 # Create necessary directories
 RUN mkdir -p certs public data
 
-# Build production server bundle and ensure Tailwind CSS + vendor assets are present
-RUN bun run build && test -s ./public/assets/tailwind.css && test -d ./public/vendor/fontawesome
+# Build Tailwind CSS and vendor assets
+RUN bun run build:css && bun run vendor \
+    && test -s ./public/assets/tailwind.css && test -d ./public/vendor/fontawesome
+
+# Compile a standalone production binary (sharp is external — kept in node_modules)
+RUN BUN_TARGET="bun-linux-x64" \
+    && if [ "${TARGETARCH}" = "arm64" ]; then BUN_TARGET="bun-linux-arm64"; fi \
+    && bun build --production --minify --external sharp src/index.ts \
+       --compile --target "$BUN_TARGET" --outfile overlord-server
 
 # Expose the default port
 EXPOSE 5173
@@ -111,5 +118,5 @@ ENV HOST=0.0.0.0
 ENV DATA_DIR=/app/data
 ENV NODE_ENV=production
 
-# Run the production build
-CMD ["bun", "run", "dist/index.js"]
+# Run the compiled production binary
+CMD ["./overlord-server"]
