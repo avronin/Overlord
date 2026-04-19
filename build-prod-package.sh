@@ -83,7 +83,9 @@ export PORT="${PORT:-5173}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
 export NODE_ENV="${NODE_ENV:-production}"
 bun install
-bun run start
+bun run build:css && bun run vendor
+bun run minify
+bun run src/index.ts
 EOF
 chmod +x "$RELEASE_DIR/start-prod-release.sh"
 

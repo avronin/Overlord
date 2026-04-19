@@ -74,11 +74,11 @@ echo [8/10] Copying required public web assets...
 robocopy "%SERVER_SRC%\public" "%RELEASE_DIR%\public" /E >nul
 if errorlevel 8 goto :robocopy_err
 
-echo [9/10] Minifying public JavaScript assets...
-for %%F in ("%SERVER_SRC%\public\assets\*.js") do (
-  call bun build --minify --no-bundle --target=browser --outfile "%RELEASE_DIR%\public\assets\%%~nxF" "%%~fF" >nul
-  if errorlevel 1 goto :err
-)
+echo [9/10] Minifying public JS, CSS, and HTML assets...
+pushd "%SERVER_SRC%"
+call bun run scripts/minify-public.ts --dir "%RELEASE_DIR%\public"
+if errorlevel 1 goto :err
+popd
 
 echo [10/10] Creating runner scripts...
 
