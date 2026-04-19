@@ -103,6 +103,12 @@ RUN mkdir -p certs public data
 RUN bun run build:css && bun run vendor \
     && test -s ./public/assets/tailwind.css && test -d ./public/vendor/fontawesome
 
+# Minify public JavaScript assets (mirrors release build step 9)
+RUN for f in public/assets/*.js; do \
+      [ -f "$f" ] || continue; \
+      bun build --minify --no-bundle --target=browser --outfile "$f" "$f"; \
+    done
+
 # Compile a standalone production binary (sharp is external — kept in node_modules)
 RUN BUN_TARGET="bun-linux-x64" \
     && if [ "${TARGETARCH}" = "arm64" ]; then BUN_TARGET="bun-linux-arm64"; fi \
