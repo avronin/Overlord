@@ -64,6 +64,16 @@ export interface Config {
   chat: {
     retentionDays: number;
   };
+  registration: {
+    mode: "off" | "open" | "key" | "approval";
+    defaultRole: "operator" | "viewer";
+    maxUsersTotal: number;
+  };
+  buildRateLimit: {
+    maxBuildsPerHour: number;
+    maxConcurrentPerUser: number;
+    globalMaxConcurrent: number;
+  };
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -125,6 +135,16 @@ const DEFAULT_CONFIG: Config = {
   },
   chat: {
     retentionDays: 30,
+  },
+  registration: {
+    mode: "off" as const,
+    defaultRole: "operator" as const,
+    maxUsersTotal: 0,
+  },
+  buildRateLimit: {
+    maxBuildsPerHour: 5,
+    maxConcurrentPerUser: 1,
+    globalMaxConcurrent: 3,
   },
 };
 
@@ -459,6 +479,40 @@ export function loadConfig(): Config {
         fileConfig.chat?.retentionDays ||
         DEFAULT_CONFIG.chat.retentionDays,
     },
+    registration: {
+      mode: (() => {
+        const envMode = process.env.OVERLORD_REGISTRATION_MODE;
+        if (envMode && ["off", "open", "key", "approval"].includes(envMode)) return envMode as Config["registration"]["mode"];
+        const fileMode = fileConfig.registration?.mode;
+        if (fileMode && ["off", "open", "key", "approval"].includes(fileMode)) return fileMode as Config["registration"]["mode"];
+        return DEFAULT_CONFIG.registration.mode;
+      })(),
+      defaultRole: (() => {
+        const envRole = process.env.OVERLORD_REGISTRATION_DEFAULT_ROLE;
+        if (envRole && ["operator", "viewer"].includes(envRole)) return envRole as Config["registration"]["defaultRole"];
+        const fileRole = fileConfig.registration?.defaultRole;
+        if (fileRole && ["operator", "viewer"].includes(fileRole)) return fileRole as Config["registration"]["defaultRole"];
+        return DEFAULT_CONFIG.registration.defaultRole;
+      })(),
+      maxUsersTotal:
+        Number(process.env.OVERLORD_REGISTRATION_MAX_USERS) ||
+        fileConfig.registration?.maxUsersTotal ||
+        DEFAULT_CONFIG.registration.maxUsersTotal,
+    },
+    buildRateLimit: {
+      maxBuildsPerHour:
+        Number(process.env.OVERLORD_BUILD_MAX_PER_HOUR) ||
+        fileConfig.buildRateLimit?.maxBuildsPerHour ||
+        DEFAULT_CONFIG.buildRateLimit.maxBuildsPerHour,
+      maxConcurrentPerUser:
+        Number(process.env.OVERLORD_BUILD_MAX_CONCURRENT_USER) ||
+        fileConfig.buildRateLimit?.maxConcurrentPerUser ||
+        DEFAULT_CONFIG.buildRateLimit.maxConcurrentPerUser,
+      globalMaxConcurrent:
+        Number(process.env.OVERLORD_BUILD_MAX_CONCURRENT_GLOBAL) ||
+        fileConfig.buildRateLimit?.globalMaxConcurrent ||
+        DEFAULT_CONFIG.buildRateLimit.globalMaxConcurrent,
+    },
   };
 
   if (saveChanged) {
@@ -697,6 +751,68 @@ export async function updateChatConfig(
   return next;
 }
 
+export async function updateRegistrationConfig(
+  updates: Partial<Config["registration"]>,
+): Promise<Config["registration"]> {
+  const current = getConfig();
+
+  const validModes = ["off", "open", "key", "approval"] as const;
+  const validRoles = ["operator", "viewer"] as const;
+
+  const next: Config["registration"] = {
+    ...current.registration,
+    ...updates,
+  };
+
+  if (!validModes.includes(next.mode as any)) {
+    next.mode = current.registration.mode;
+  }
+  if (!validRoles.includes(next.defaultRole as any)) {
+    next.defaultRole = current.registration.defaultRole;
+  }
+  next.maxUsersTotal = Math.max(0, Math.min(100000, Number(next.maxUsersTotal) || 0));
+
+  configCache = {
+    ...current,
+    registration: next,
+  };
+
+  const fileConfig = readFileConfigForUpdate();
+  fileConfig.registration = next;
+  await writePersistentFileConfig(fileConfig);
+  return next;
+}
+
+export async function updateBuildRateLimitConfig(
+  updates: Partial<Config["buildRateLimit"]>,
+): Promise<Config["buildRateLimit"]> {
+  const current = getConfig();
+
+  const toNumberOr = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const next: Config["buildRateLimit"] = {
+    ...current.buildRateLimit,
+    ...updates,
+  };
+
+  next.maxBuildsPerHour = Math.min(100, Math.max(1, toNumberOr(next.maxBuildsPerHour, 5)));
+  next.maxConcurrentPerUser = Math.min(10, Math.max(1, toNumberOr(next.maxConcurrentPerUser, 1)));
+  next.globalMaxConcurrent = Math.min(50, Math.max(1, toNumberOr(next.globalMaxConcurrent, 3)));
+
+  configCache = {
+    ...current,
+    buildRateLimit: next,
+  };
+
+  const fileConfig = readFileConfigForUpdate();
+  fileConfig.buildRateLimit = next;
+  await writePersistentFileConfig(fileConfig);
+  return next;
+}
+
 export function getExportableConfig(serverVersion: string): Record<string, unknown> {
   const config = getConfig();
   return {
@@ -715,6 +831,8 @@ export function getExportableConfig(serverVersion: string): Record<string, unkno
     appearance: config.appearance,
     plugins: config.plugins,
     chat: config.chat,
+    registration: config.registration,
+    buildRateLimit: config.buildRateLimit,
   };
 }
 
@@ -776,6 +894,16 @@ export async function importFullConfig(data: Record<string, any>): Promise<{ app
   if (data.chat && typeof data.chat === "object") {
     await updateChatConfig(data.chat);
     applied.push("chat");
+  }
+
+  if (data.registration && typeof data.registration === "object") {
+    await updateRegistrationConfig(data.registration);
+    applied.push("registration");
+  }
+
+  if (data.buildRateLimit && typeof data.buildRateLimit === "object") {
+    await updateBuildRateLimitConfig(data.buildRateLimit);
+    applied.push("buildRateLimit");
   }
 
   if (data.auth && typeof data.auth === "object") {

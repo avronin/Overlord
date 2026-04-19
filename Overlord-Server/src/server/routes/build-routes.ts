@@ -10,6 +10,8 @@ import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
 import { logger } from "../../logger";
 import { normalizeClientOs } from "../deploy-utils";
+import { canUserBuild, recordBuildStart, recordBuildEnd } from "../../build-rate-limit";
+import { getConfig } from "../../config";
 import path from "path";
 import fs from "fs";
 import { resolveRuntimeRoot } from "../runtime-paths";
@@ -43,6 +45,21 @@ export async function handleBuildRoutes(
 
     if (req.method === "POST" && url.pathname === "/api/build/start") {
       requirePermission(user, "clients:build");
+
+      if (getConfig().registration.mode !== "off") {
+        const rateLimitResult = canUserBuild(user.userId);
+        if (!rateLimitResult.allowed) {
+          return Response.json(
+            { error: rateLimitResult.reason || "Build rate limit exceeded" },
+            {
+              status: 429,
+              headers: rateLimitResult.retryAfter
+                ? { "Retry-After": String(rateLimitResult.retryAfter) }
+                : {},
+            },
+          );
+        }
+      }
 
       const body = await req.json();
       const {
@@ -307,6 +324,9 @@ export async function handleBuildRoutes(
         safeBoundFiles = validated;
       }
 
+      const rateLimitActive = getConfig().registration.mode !== "off";
+      if (rateLimitActive) recordBuildStart(user.userId);
+
       deps.startBuildProcess(buildId, {
         platforms: allowedPlatforms,
         serverUrl: safeServerUrl,
@@ -343,6 +363,8 @@ export async function handleBuildRoutes(
         sleepSeconds: safeSleepSeconds,
         boundFiles: safeBoundFiles,
         iosBundleId: typeof iosBundleId === "string" && /^[a-zA-Z0-9.-]{1,128}$/.test(iosBundleId.trim()) ? iosBundleId.trim() : undefined,
+      }).finally(() => {
+        if (rateLimitActive) recordBuildEnd(user.userId);
       });
 
       return Response.json({ buildId });

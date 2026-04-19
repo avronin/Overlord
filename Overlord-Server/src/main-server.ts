@@ -45,6 +45,7 @@ import { sanitizePluginId } from "./server/plugin-utils";
 import { dispatchAutoScriptsForConnection } from "./server/auto-script-dispatch";
 import { dispatchAutoDeploysForConnection } from "./server/auto-deploy-dispatch";
 import { handleAutoDeployRoutes } from "./server/routes/auto-deploy-routes";
+import { handleRegistrationRoutes } from "./server/routes/registration-routes";
 import { consumeHttpDownloadPayload, type PendingHttpDownload } from "./server/http-download-consumer";
 import { startBuildProcess as runBuildProcess } from "./server/build-process";
 import { createHttpFetchHandler } from "./server/http-dispatch";
@@ -477,6 +478,7 @@ async function startServer() {
     wsUpgrade: {
       isAuthorizedAgentRequest: isAuthorizedAgent,
     },
+    registration: {},
   };
 
   function handleBuildTagConnection(clientId: string, buildTagValue: string) {
@@ -658,6 +660,7 @@ async function startServer() {
     fetch: createHttpFetchHandler({
       metrics,
       CORS_HEADERS,
+      handleRegistrationRoutes,
       handleAuthRoutes,
       handleNotificationsConfigRoutes,
       handleAutoScriptsRoutes,

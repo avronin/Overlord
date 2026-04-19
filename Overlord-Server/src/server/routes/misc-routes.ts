@@ -1,6 +1,6 @@
 import { authenticateRequest } from "../../auth";
 import { AuditAction, getAuditLogs, logAudit } from "../../auditLog";
-import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig, updateChatConfig, getExportableConfig, importFullConfig } from "../../config";
+import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig, updateChatConfig, getExportableConfig, importFullConfig, updateRegistrationConfig, updateBuildRateLimitConfig } from "../../config";
 import { getClientMetricsSummary, getClientMetricsSummaryForUser } from "../../db";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
@@ -590,6 +590,76 @@ export async function handleMiscRoutes(
       }
     } catch { }
     return new Response("Certificate not available", { status: 404 });
+  }
+
+  // ── Registration settings (admin only) ──────────────────────────────
+  if (url.pathname === "/api/settings/registration") {
+    const user = await authenticateRequest(req);
+    if (!user) return new Response("Unauthorized", { status: 401 });
+    if (user.role !== "admin") return new Response("Forbidden: Admin access required", { status: 403 });
+
+    if (req.method === "GET") {
+      return Response.json({ registration: getConfig().registration }, { headers: deps.CORS_HEADERS });
+    }
+
+    if (req.method === "PUT") {
+      let body: any = {};
+      try { body = await req.json(); } catch {
+        return Response.json({ error: "Invalid JSON" }, { status: 400 });
+      }
+
+      const updated = await updateRegistrationConfig({
+        mode: body?.mode,
+        defaultRole: body?.defaultRole,
+        maxUsersTotal: body?.maxUsersTotal !== undefined ? Number(body.maxUsersTotal) : undefined,
+      });
+
+      logAudit({
+        timestamp: Date.now(),
+        username: user.username,
+        ip: deps.requestIP?.(req)?.address || "unknown",
+        action: AuditAction.COMMAND,
+        details: `Updated registration settings (mode: ${updated.mode})`,
+        success: true,
+      });
+
+      return Response.json({ ok: true, registration: updated }, { headers: deps.CORS_HEADERS });
+    }
+  }
+
+  // ── Build rate limit settings (admin only) ──────────────────────────
+  if (url.pathname === "/api/settings/build-rate-limit") {
+    const user = await authenticateRequest(req);
+    if (!user) return new Response("Unauthorized", { status: 401 });
+    if (user.role !== "admin") return new Response("Forbidden: Admin access required", { status: 403 });
+
+    if (req.method === "GET") {
+      return Response.json({ buildRateLimit: getConfig().buildRateLimit }, { headers: deps.CORS_HEADERS });
+    }
+
+    if (req.method === "PUT") {
+      let body: any = {};
+      try { body = await req.json(); } catch {
+        return Response.json({ error: "Invalid JSON" }, { status: 400 });
+      }
+
+      const updated = await updateBuildRateLimitConfig({
+        maxBuildsPerHour: body?.maxBuildsPerHour !== undefined ? Number(body.maxBuildsPerHour) : undefined,
+        maxConcurrentPerUser: body?.maxConcurrentPerUser !== undefined ? Number(body.maxConcurrentPerUser) : undefined,
+        globalMaxConcurrent: body?.globalMaxConcurrent !== undefined ? Number(body.globalMaxConcurrent) : undefined,
+      });
+
+      logAudit({
+        timestamp: Date.now(),
+        username: user.username,
+        ip: deps.requestIP?.(req)?.address || "unknown",
+        action: AuditAction.COMMAND,
+        details: "Updated build rate limit settings",
+        success: true,
+      });
+
+      return Response.json({ ok: true, buildRateLimit: updated }, { headers: deps.CORS_HEADERS });
+    }
   }
 
   return null;

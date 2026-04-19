@@ -664,6 +664,141 @@
         </form>
       </section>
 
+      <!-- Registration Settings (admin only) -->
+      <section id="registration-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+            <i class="fa-solid fa-user-plus text-emerald-400"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold">Registration</h2>
+            <p class="text-sm text-slate-400">Admin-only. Control how new users can register.</p>
+          </div>
+        </div>
+
+        <form id="registration-form" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <label class="block">
+              <span class="text-sm text-slate-300">Registration Mode</span>
+              <select id="reg-mode" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <option value="off">Off</option>
+                <option value="open">Open</option>
+                <option value="key">Key Required</option>
+                <option value="approval">Approval Required</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Default Role</span>
+              <select id="reg-default-role" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <option value="operator">Operator</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Max Users (0 = unlimited)</span>
+              <input id="reg-max-users" type="number" min="0" max="10000" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+          </div>
+          <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-colors text-white text-sm font-medium">
+            <i class="fa-solid fa-floppy-disk"></i>Save Registration Settings
+          </button>
+        </form>
+        <p id="reg-settings-msg" class="hidden text-sm rounded-lg px-3 py-2 border"></p>
+
+        <!-- Key Management (visible when mode=key) -->
+        <div id="reg-key-section" class="hidden space-y-3 border-t border-slate-700 pt-4">
+          <h3 class="text-md font-semibold text-slate-200">Registration Keys</h3>
+          <div class="flex flex-wrap items-end gap-3">
+            <label class="block">
+              <span class="text-sm text-slate-300">Count</span>
+              <input id="reg-key-count" type="number" value="1" min="1" max="100" class="mt-1 w-24 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Label (optional)</span>
+              <input id="reg-key-label" type="text" maxlength="64" placeholder="e.g. Batch 1" class="mt-1 w-40 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Expires (hours, 0=never)</span>
+              <input id="reg-key-expires" type="number" value="0" min="0" max="8760" class="mt-1 w-28 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+            <button id="reg-key-generate-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-colors text-white text-sm font-medium">
+              <i class="fa-solid fa-plus"></i>Generate
+            </button>
+            <a id="reg-key-export-btn" href="/api/registration/keys/export" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-white text-sm font-medium">
+              <i class="fa-solid fa-file-export"></i>Export
+            </a>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-slate-300">
+              <thead class="text-xs uppercase text-slate-500 border-b border-slate-700">
+                <tr>
+                  <th class="px-3 py-2">Key</th>
+                  <th class="px-3 py-2">Label</th>
+                  <th class="px-3 py-2">Status</th>
+                  <th class="px-3 py-2">Created</th>
+                  <th class="px-3 py-2">Expires</th>
+                  <th class="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody id="reg-keys-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pending Registrations (visible when mode=approval) -->
+        <div id="reg-pending-section" class="hidden space-y-3 border-t border-slate-700 pt-4">
+          <h3 class="text-md font-semibold text-slate-200">Pending Registrations</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-slate-300">
+              <thead class="text-xs uppercase text-slate-500 border-b border-slate-700">
+                <tr>
+                  <th class="px-3 py-2">Username</th>
+                  <th class="px-3 py-2">Requested</th>
+                  <th class="px-3 py-2">Status</th>
+                  <th class="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="reg-pending-tbody"></tbody>
+            </table>
+          </div>
+          <p id="reg-pending-empty" class="text-sm text-slate-500">No pending registrations.</p>
+        </div>
+      </section>
+
+      <!-- Build Rate Limit (admin only) -->
+      <section id="build-rate-limit-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/30">
+            <i class="fa-solid fa-gauge-high text-orange-400"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-semibold">Build Rate Limit</h2>
+            <p class="text-sm text-slate-400">Admin-only. Prevent abuse by limiting build frequency.</p>
+          </div>
+        </div>
+
+        <form id="build-rate-limit-form" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="block">
+              <span class="text-sm text-slate-300">Max Builds per Hour (per user)</span>
+              <input id="brl-max-per-hour" type="number" min="1" max="100" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Max Concurrent (per user)</span>
+              <input id="brl-max-concurrent-user" type="number" min="1" max="10" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-300">Global Max Concurrent</span>
+              <input id="brl-global-concurrent" type="number" min="1" max="50" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+            </label>
+          </div>
+          <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-700 hover:bg-orange-600 transition-colors text-white text-sm font-medium">
+            <i class="fa-solid fa-floppy-disk"></i>Save Rate Limit Settings
+          </button>
+        </form>
+        <p id="brl-settings-msg" class="hidden text-sm rounded-lg px-3 py-2 border"></p>
+      </section>
+
       <footer class="text-center text-sm text-slate-500 py-4 border-t border-slate-800 mt-4">
         <p>Created by KDot &mdash; <a href="https://t.me/kunta" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 transition-colors"><i class="fa-brands fa-telegram"></i> t.me/kunta</a></p>
       </footer>

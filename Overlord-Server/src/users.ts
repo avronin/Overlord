@@ -211,6 +211,47 @@ try {
   }
 }
 
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN registered_via TEXT DEFAULT NULL`);
+  logger.info("[users] Added registered_via column to existing database");
+} catch (err: any) {
+  if (!err.message?.includes("duplicate column name")) {
+    logger.error("[users] Migration error:", err);
+  }
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS registration_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    label TEXT,
+    created_by INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    used_by INTEGER,
+    used_at INTEGER,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_registration_keys_key ON registration_keys("key")`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pending_registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    requested_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'denied')),
+    reviewed_by INTEGER,
+    reviewed_at INTEGER,
+    key_used INTEGER,
+    FOREIGN KEY (key_used) REFERENCES registration_keys(id)
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_pending_registrations_status ON pending_registrations(status)`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_registrations_username_pending ON pending_registrations(username) WHERE status = 'pending'`);
+
+
 const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as {
   count: number;
 };
@@ -546,7 +587,7 @@ export function resetUserFeaturePermissions(
   }
 }
 
-function validatePasswordPolicy(password: string): string | null {
+export function validatePasswordPolicy(password: string): string | null {
   const security = getConfig().security;
   const minLength = Math.min(128, Math.max(6, Number(security.passwordMinLength) || 6));
 
@@ -976,4 +1017,258 @@ export function getUsersForNotificationDeliveryByClient(clientId: string): UserD
   return getUsersForNotificationDelivery().filter((user) =>
     canUserAccessClient(user.id, user.role, clientId),
   );
+}
+
+
+export interface RegistrationKey {
+  id: number;
+  key: string;
+  label: string | null;
+  created_by: number;
+  created_at: number;
+  expires_at: number | null;
+  used_by: number | null;
+  used_at: number | null;
+}
+
+export interface PendingRegistration {
+  id: number;
+  username: string;
+  password_hash: string;
+  requested_at: number;
+  status: "pending" | "approved" | "denied";
+  reviewed_by: number | null;
+  reviewed_at: number | null;
+  key_used: number | null;
+}
+
+export function generateRegistrationKey(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const segments = 4;
+  const segmentLen = 5;
+  const parts: string[] = [];
+  for (let s = 0; s < segments; s++) {
+    let seg = "";
+    const bytes = new Uint8Array(segmentLen);
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < segmentLen; i++) {
+      seg += chars[bytes[i] % chars.length];
+    }
+    parts.push(seg);
+  }
+  return parts.join("-");
+}
+
+export function createRegistrationKeys(
+  count: number,
+  createdBy: number,
+  label?: string,
+  expiresInHours?: number,
+): RegistrationKey[] {
+  const safeCount = Math.min(100, Math.max(1, count));
+  const now = Date.now();
+  const expiresAt = expiresInHours && expiresInHours > 0
+    ? now + expiresInHours * 60 * 60 * 1000
+    : null;
+  const safeLabel = label ? String(label).slice(0, 128).trim() : null;
+
+  const stmt = db.prepare(
+    `INSERT INTO registration_keys ("key", label, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  const keys: RegistrationKey[] = [];
+  const tx = db.transaction(() => {
+    for (let i = 0; i < safeCount; i++) {
+      const key = generateRegistrationKey();
+      const result = stmt.run(key, safeLabel, createdBy, now, expiresAt);
+      keys.push({
+        id: result.lastInsertRowid as number,
+        key,
+        label: safeLabel,
+        created_by: createdBy,
+        created_at: now,
+        expires_at: expiresAt,
+        used_by: null,
+        used_at: null,
+      });
+    }
+  });
+  tx();
+  return keys;
+}
+
+export function listRegistrationKeys(): RegistrationKey[] {
+  return db.prepare(
+    `SELECT id, "key", label, created_by, created_at, expires_at, used_by, used_at FROM registration_keys ORDER BY created_at DESC`,
+  ).all() as RegistrationKey[];
+}
+
+export function getRegistrationKeyByValue(keyValue: string): RegistrationKey | null {
+  const row = db.prepare(
+    `SELECT id, "key", label, created_by, created_at, expires_at, used_by, used_at FROM registration_keys WHERE "key" = ?`,
+  ).get(keyValue) as RegistrationKey | undefined;
+  return row || null;
+}
+
+export function markRegistrationKeyUsed(keyId: number, usedByUserId: number): void {
+  db.prepare(`UPDATE registration_keys SET used_by = ?, used_at = ? WHERE id = ?`).run(
+    usedByUserId, Date.now(), keyId,
+  );
+}
+
+
+export function claimRegistrationKey(
+  keyValue: string,
+  usedByUserId: number,
+): { success: true; key: RegistrationKey } | { success: false; error: string } {
+  const tx = db.transaction(() => {
+    const row = db.prepare(
+      `SELECT id, "key", label, created_by, created_at, expires_at, used_by, used_at FROM registration_keys WHERE "key" = ?`,
+    ).get(keyValue) as RegistrationKey | undefined;
+
+    if (!row) return { success: false as const, error: "Invalid registration key" };
+    if (row.used_by !== null) return { success: false as const, error: "This registration key has already been used" };
+    if (row.expires_at && row.expires_at < Date.now()) return { success: false as const, error: "This registration key has expired" };
+
+    db.prepare(`UPDATE registration_keys SET used_by = ?, used_at = ? WHERE id = ? AND used_by IS NULL`).run(
+      usedByUserId, Date.now(), row.id,
+    );
+
+    return { success: true as const, key: row };
+  });
+  return tx();
+}
+
+export function deleteRegistrationKey(keyId: number): boolean {
+  const result = db.prepare(`DELETE FROM registration_keys WHERE id = ?`).run(keyId);
+  return (result.changes as number) > 0;
+}
+
+export function createPendingRegistration(
+  username: string,
+  passwordHash: string,
+  keyUsed?: number,
+): { success: boolean; id?: number; error?: string } {
+  try {
+    const result = db.prepare(
+      `INSERT INTO pending_registrations (username, password_hash, requested_at, status, key_used) VALUES (?, ?, ?, 'pending', ?)`,
+    ).run(username, passwordHash, Date.now(), keyUsed || null);
+    return { success: true, id: result.lastInsertRowid as number };
+  } catch (err: any) {
+    if (err.message?.includes("UNIQUE constraint")) {
+      return { success: false, error: "A registration with this username is already pending" };
+    }
+    return { success: false, error: err.message || "Failed to create pending registration" };
+  }
+}
+
+export function listPendingRegistrations(): PendingRegistration[] {
+  return db.prepare(
+    `SELECT id, username, requested_at, status, reviewed_by, reviewed_at, key_used FROM pending_registrations WHERE status = 'pending' ORDER BY requested_at ASC`,
+  ).all() as PendingRegistration[];
+}
+
+export function getPendingRegistration(id: number): PendingRegistration | null {
+  const row = db.prepare(
+    `SELECT * FROM pending_registrations WHERE id = ?`,
+  ).get(id) as PendingRegistration | undefined;
+  return row || null;
+}
+
+export async function approvePendingRegistration(
+  pendingId: number,
+  reviewedBy: number,
+  defaultRole: UserRole,
+): Promise<{ success: boolean; userId?: number; error?: string }> {
+  const pending = getPendingRegistration(pendingId);
+  if (!pending) return { success: false, error: "Pending registration not found" };
+  if (pending.status !== "pending") return { success: false, error: "Registration already reviewed" };
+
+  const existing = getUserByUsername(pending.username);
+  if (existing) return { success: false, error: "Username already exists" };
+
+  try {
+    const role = defaultRole === "viewer" ? "viewer" : "operator";
+    const result = db.prepare(
+      `INSERT INTO users (username, password_hash, role, created_at, created_by, client_scope, can_build, can_upload_files, registered_via) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      pending.username, pending.password_hash, role, Date.now(), "registration",
+      "allowlist", role === "operator" ? 1 : 0, 0, "approval",
+    );
+
+    db.prepare(
+      `UPDATE pending_registrations SET status = 'approved', reviewed_by = ?, reviewed_at = ? WHERE id = ?`,
+    ).run(reviewedBy, Date.now(), pendingId);
+
+    invalidateNotificationDeliveryCache();
+    return { success: true, userId: result.lastInsertRowid as number };
+  } catch (err: any) {
+    logger.error("[users] approvePendingRegistration error:", err);
+    return { success: false, error: err.message || "Failed to approve registration" };
+  }
+}
+
+export function denyPendingRegistration(
+  pendingId: number,
+  reviewedBy: number,
+): { success: boolean; error?: string } {
+  const pending = getPendingRegistration(pendingId);
+  if (!pending) return { success: false, error: "Pending registration not found" };
+  if (pending.status !== "pending") return { success: false, error: "Registration already reviewed" };
+
+  db.prepare(
+    `UPDATE pending_registrations SET status = 'denied', reviewed_by = ?, reviewed_at = ? WHERE id = ?`,
+  ).run(reviewedBy, Date.now(), pendingId);
+
+  return { success: true };
+}
+
+export async function registerUser(
+  username: string,
+  password: string,
+  registeredVia: "open" | "key",
+  defaultRole: UserRole,
+): Promise<{ success: boolean; error?: string; userId?: number }> {
+  if (!username || username.length < 3 || username.length > 32) {
+    return { success: false, error: "Username must be between 3 and 32 characters" };
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    return { success: false, error: "Username can only contain letters, numbers, hyphens, and underscores" };
+  }
+
+  const policyError = validatePasswordPolicy(password);
+  if (policyError) return { success: false, error: policyError };
+
+  const existing = getUserByUsername(username);
+  if (existing) return { success: false, error: "Username already exists" };
+
+  const pendingExisting = db.prepare(
+    `SELECT id FROM pending_registrations WHERE username = ? AND status = 'pending'`,
+  ).get(username);
+  if (pendingExisting) return { success: false, error: "A registration with this username is already pending" };
+
+  try {
+    const passwordHash = await Bun.password.hash(password, { algorithm: "bcrypt", cost: 10 });
+    const role = defaultRole === "viewer" ? "viewer" : "operator";
+    const result = db.prepare(
+      `INSERT INTO users (username, password_hash, role, created_at, created_by, client_scope, can_build, can_upload_files, registered_via) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      username, passwordHash, role, Date.now(), "registration",
+      "allowlist", role === "operator" ? 1 : 0, 0, registeredVia,
+    );
+
+    invalidateNotificationDeliveryCache();
+    return { success: true, userId: result.lastInsertRowid as number };
+  } catch (err: any) {
+    if (err.message?.includes("UNIQUE constraint")) {
+      return { success: false, error: "Username already exists" };
+    }
+    logger.error("[users] registerUser error:", err);
+    return { success: false, error: err.message || "Failed to register user" };
+  }
+}
+
+export function getTotalUserCount(): number {
+  const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+  return row.count;
 }

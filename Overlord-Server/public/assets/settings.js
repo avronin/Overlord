@@ -1057,6 +1057,276 @@ async function handleRemoveInactiveSessions() {
   }
 }
 
+// ── Registration Settings ──────────────────────────────────────────────────
+
+async function loadRegistrationSettings() {
+  try {
+    const res = await fetch("/api/settings/registration", { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const reg = data.registration || {};
+    const modeEl = document.getElementById("reg-mode");
+    const roleEl = document.getElementById("reg-default-role");
+    const maxEl = document.getElementById("reg-max-users");
+    if (modeEl) modeEl.value = reg.mode || "off";
+    if (roleEl) roleEl.value = reg.defaultRole || "operator";
+    if (maxEl) maxEl.value = reg.maxUsersTotal ?? 0;
+    updateRegSubsections(reg.mode || "off");
+    if (reg.mode === "key") loadRegistrationKeys();
+    if (reg.mode === "approval") loadPendingRegistrations();
+  } catch (e) {
+    console.error("Failed to load registration settings", e);
+  }
+}
+
+function updateRegSubsections(mode) {
+  const keySection = document.getElementById("reg-key-section");
+  const pendingSection = document.getElementById("reg-pending-section");
+  if (keySection) keySection.classList.toggle("hidden", mode !== "key");
+  if (pendingSection) pendingSection.classList.toggle("hidden", mode !== "approval");
+}
+
+function showRegMsg(text, type) {
+  const el = document.getElementById("reg-settings-msg");
+  if (!el) return;
+  el.textContent = text;
+  el.className = `text-sm rounded-lg px-3 py-2 border ${type === "error" ? "border-rose-800 bg-rose-900/20 text-rose-200" : "border-emerald-800 bg-emerald-900/20 text-emerald-200"}`;
+  el.classList.remove("hidden");
+  setTimeout(() => el.classList.add("hidden"), 5000);
+}
+
+async function saveRegistrationSettings(e) {
+  e.preventDefault();
+  const mode = document.getElementById("reg-mode")?.value;
+  const defaultRole = document.getElementById("reg-default-role")?.value;
+  const maxUsersTotal = Number(document.getElementById("reg-max-users")?.value) || 0;
+
+  try {
+    const res = await fetch("/api/settings/registration", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, defaultRole, maxUsersTotal }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showRegMsg(data.error || "Failed to save", "error");
+      return;
+    }
+    showRegMsg("Registration settings saved.", "success");
+    updateRegSubsections(mode);
+    if (mode === "key") loadRegistrationKeys();
+    if (mode === "approval") loadPendingRegistrations();
+  } catch {
+    showRegMsg("Network error.", "error");
+  }
+}
+
+async function loadRegistrationKeys() {
+  const tbody = document.getElementById("reg-keys-tbody");
+  if (!tbody) return;
+  try {
+    const res = await fetch("/api/registration/keys", { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const keys = data.keys || [];
+    if (keys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-center text-slate-500">No keys generated yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = keys.map(k => {
+      const status = k.used_by ? '<span class="text-amber-400">Used</span>'
+        : (k.expires_at && k.expires_at < Date.now()) ? '<span class="text-slate-500">Expired</span>'
+        : '<span class="text-emerald-400">Available</span>';
+      const created = new Date(k.created_at).toLocaleDateString();
+      const expires = k.expires_at ? new Date(k.expires_at).toLocaleDateString() : "Never";
+      return `<tr class="border-b border-slate-800">
+        <td class="px-3 py-2 font-mono text-xs">${escapeHtml(k.key.substring(0, 12))}...</td>
+        <td class="px-3 py-2">${escapeHtml(k.label || "—")}</td>
+        <td class="px-3 py-2">${status}</td>
+        <td class="px-3 py-2">${created}</td>
+        <td class="px-3 py-2">${expires}</td>
+        <td class="px-3 py-2">${!k.used_by ? `<button data-delete-key="${k.id}" class="text-rose-400 hover:text-rose-300 text-xs"><i class="fa-solid fa-trash"></i></button>` : ""}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    console.error("Failed to load keys", e);
+  }
+}
+
+async function generateRegistrationKeys() {
+  const count = Number(document.getElementById("reg-key-count")?.value) || 1;
+  const label = document.getElementById("reg-key-label")?.value || undefined;
+  const expiresInHours = Number(document.getElementById("reg-key-expires")?.value) || undefined;
+
+  try {
+    const res = await fetch("/api/registration/keys", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ count, label, expiresInHours }),
+    });
+    if (!res.ok) {
+      showRegMsg("Failed to generate keys", "error");
+      return;
+    }
+    showRegMsg(`Generated ${count} key(s).`, "success");
+    loadRegistrationKeys();
+  } catch {
+    showRegMsg("Network error.", "error");
+  }
+}
+
+async function deleteRegistrationKey(keyId) {
+  try {
+    const res = await fetch(`/api/registration/keys/${keyId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) loadRegistrationKeys();
+  } catch {}
+}
+
+async function loadPendingRegistrations() {
+  const tbody = document.getElementById("reg-pending-tbody");
+  const emptyEl = document.getElementById("reg-pending-empty");
+  if (!tbody) return;
+  try {
+    const res = await fetch("/api/registration/pending", { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const pending = (data.pending || []).filter(p => p.status === "pending");
+    if (pending.length === 0) {
+      tbody.innerHTML = "";
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add("hidden");
+    tbody.innerHTML = pending.map(p => {
+      const requested = new Date(p.requested_at).toLocaleString();
+      return `<tr class="border-b border-slate-800">
+        <td class="px-3 py-2">${escapeHtml(p.username)}</td>
+        <td class="px-3 py-2">${requested}</td>
+        <td class="px-3 py-2"><span class="text-amber-400">Pending</span></td>
+        <td class="px-3 py-2 space-x-2">
+          <button data-approve-pending="${p.id}" class="text-emerald-400 hover:text-emerald-300 text-xs"><i class="fa-solid fa-check"></i> Approve</button>
+          <button data-deny-pending="${p.id}" class="text-rose-400 hover:text-rose-300 text-xs"><i class="fa-solid fa-xmark"></i> Deny</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    console.error("Failed to load pending registrations", e);
+  }
+}
+
+async function handlePendingAction(id, action) {
+  try {
+    const res = await fetch(`/api/registration/pending/${id}/${action}`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showRegMsg(data.error || `Failed to ${action}`, "error");
+      return;
+    }
+    showRegMsg(`Registration ${action}d.`, "success");
+    loadPendingRegistrations();
+  } catch {
+    showRegMsg("Network error.", "error");
+  }
+}
+
+function initRegistrationHandlers() {
+  const regForm = document.getElementById("registration-form");
+  if (regForm) regForm.addEventListener("submit", saveRegistrationSettings);
+
+  const modeEl = document.getElementById("reg-mode");
+  if (modeEl) modeEl.addEventListener("change", () => {
+    updateRegSubsections(modeEl.value);
+    if (modeEl.value === "key") loadRegistrationKeys();
+    if (modeEl.value === "approval") loadPendingRegistrations();
+  });
+
+  const genBtn = document.getElementById("reg-key-generate-btn");
+  if (genBtn) genBtn.addEventListener("click", generateRegistrationKeys);
+
+  // Delegate key delete and pending approve/deny
+  document.addEventListener("click", (e) => {
+    const deleteBtn = e.target.closest("[data-delete-key]");
+    if (deleteBtn) {
+      deleteRegistrationKey(Number(deleteBtn.dataset.deleteKey));
+      return;
+    }
+    const approveBtn = e.target.closest("[data-approve-pending]");
+    if (approveBtn) {
+      handlePendingAction(Number(approveBtn.dataset.approvePending), "approve");
+      return;
+    }
+    const denyBtn = e.target.closest("[data-deny-pending]");
+    if (denyBtn) {
+      handlePendingAction(Number(denyBtn.dataset.denyPending), "deny");
+    }
+  });
+}
+
+// ── Build Rate Limit Settings ──────────────────────────────────────────────
+
+async function loadBuildRateLimitSettings() {
+  try {
+    const res = await fetch("/api/settings/build-rate-limit", { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const brl = data.buildRateLimit || {};
+    const perHourEl = document.getElementById("brl-max-per-hour");
+    const concUserEl = document.getElementById("brl-max-concurrent-user");
+    const globalConcEl = document.getElementById("brl-global-concurrent");
+    if (perHourEl) perHourEl.value = brl.maxBuildsPerHour ?? 5;
+    if (concUserEl) concUserEl.value = brl.maxConcurrentPerUser ?? 1;
+    if (globalConcEl) globalConcEl.value = brl.globalMaxConcurrent ?? 3;
+  } catch (e) {
+    console.error("Failed to load build rate limit settings", e);
+  }
+}
+
+function showBrlMsg(text, type) {
+  const el = document.getElementById("brl-settings-msg");
+  if (!el) return;
+  el.textContent = text;
+  el.className = `text-sm rounded-lg px-3 py-2 border ${type === "error" ? "border-rose-800 bg-rose-900/20 text-rose-200" : "border-emerald-800 bg-emerald-900/20 text-emerald-200"}`;
+  el.classList.remove("hidden");
+  setTimeout(() => el.classList.add("hidden"), 5000);
+}
+
+async function saveBuildRateLimitSettings(e) {
+  e.preventDefault();
+  const maxBuildsPerHour = Number(document.getElementById("brl-max-per-hour")?.value) || 5;
+  const maxConcurrentPerUser = Number(document.getElementById("brl-max-concurrent-user")?.value) || 1;
+  const globalMaxConcurrent = Number(document.getElementById("brl-global-concurrent")?.value) || 3;
+
+  try {
+    const res = await fetch("/api/settings/build-rate-limit", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ maxBuildsPerHour, maxConcurrentPerUser, globalMaxConcurrent }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showBrlMsg(data.error || "Failed to save", "error");
+      return;
+    }
+    showBrlMsg("Build rate limit settings saved.", "success");
+  } catch {
+    showBrlMsg("Network error.", "error");
+  }
+}
+
+function initBuildRateLimitHandlers() {
+  const brlForm = document.getElementById("build-rate-limit-form");
+  if (brlForm) brlForm.addEventListener("submit", saveBuildRateLimitSettings);
+}
+
 async function init() {
   try {
     await loadCurrentUser();
@@ -1075,6 +1345,18 @@ async function init() {
     await loadAppearanceSettings();
     await loadChatSettings();
     await loadBannedIps();
+
+    // Registration + Build Rate Limit (admin only)
+    if (isAdmin(currentUser?.role)) {
+      const regSection = document.getElementById("registration-section");
+      const brlSection = document.getElementById("build-rate-limit-section");
+      if (regSection) regSection.classList.remove("hidden");
+      if (brlSection) brlSection.classList.remove("hidden");
+      await loadRegistrationSettings();
+      await loadBuildRateLimitSettings();
+      initRegistrationHandlers();
+      initBuildRateLimitHandlers();
+    }
 
     passwordForm.addEventListener("submit", updatePassword);
     prefsForm.addEventListener("submit", savePrefs);

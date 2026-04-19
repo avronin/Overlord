@@ -3,6 +3,17 @@ const user = document.getElementById("user");
 const pass = document.getElementById("pass");
 const errEl = document.getElementById("error");
 
+(async () => {
+  try {
+    const res = await fetch("/api/registration/status");
+    const data = await res.json();
+    if (data.enabled) {
+      const el = document.getElementById("register-link");
+      if (el) el.style.display = "";
+    }
+  } catch {}
+})();
+
 if (typeof anime !== "undefined") {
   const particles = document.querySelectorAll(".particle");
   particles.forEach((particle, i) => {

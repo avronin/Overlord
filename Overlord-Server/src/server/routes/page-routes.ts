@@ -150,6 +150,11 @@ export async function handlePageRoutes(
     return serveFile(deps, "change-password.html");
   }
 
+  // ---- Registration page (always accessible, no auth needed) ----
+  if (url.pathname === "/register.html") {
+    return serveFile(deps, "register.html");
+  }
+
   // ---- Static pages (table-driven) ----
   for (const page of STATIC_PAGES) {
     if (url.pathname !== page.path) continue;

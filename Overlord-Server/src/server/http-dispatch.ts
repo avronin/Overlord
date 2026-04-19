@@ -33,9 +33,11 @@ type HttpDispatchDeps<
   TPage,
   TClient,
   TWsUpgrade,
+  TRegistration
 > = {
   metrics: { withHttpMetrics: (fn: () => Promise<Response>) => Promise<Response> };
   CORS_HEADERS: Record<string, string>;
+  handleRegistrationRoutes: RouteHandlerWithDeps<TRegistration>;
   handleAuthRoutes: RouteHandlerWithServer<TServer>;
   handleNotificationsConfigRoutes: RouteHandlerWithServerDeps<TServer, TNotificationsConfig>;
   handleAutoScriptsRoutes: RouteHandler;
@@ -69,6 +71,7 @@ type HttpDispatchDeps<
     page: TPage;
     client: TClient;
     wsUpgrade: TWsUpgrade;
+    registration: TRegistration;
   };
 };
 
@@ -87,6 +90,7 @@ export function createHttpFetchHandler<
   TPage,
   TClient,
   TWsUpgrade,
+  TRegistration
 >(
   deps: HttpDispatchDeps<
     TServer,
@@ -102,8 +106,9 @@ export function createHttpFetchHandler<
     TAssets,
     TPage,
     TClient,
-    TWsUpgrade
-  >,
+    TWsUpgrade,
+    TRegistration
+  >
 ) {
   return async function fetchHandler(req: Request, server: unknown): Promise<Response> {
     return deps.metrics.withHttpMetrics(async () => {
@@ -113,6 +118,9 @@ export function createHttpFetchHandler<
       if (req.method === "OPTIONS") {
         return new Response("", { headers: deps.CORS_HEADERS });
       }
+
+      const registrationResponse = await deps.handleRegistrationRoutes(req, url, deps.routeDeps.registration);
+      if (registrationResponse) return registrationResponse;
 
       const authRouteResponse = await deps.handleAuthRoutes(req, url, routeServer);
       if (authRouteResponse) return authRouteResponse;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Overlord Login</title>
+    <title>Overlord - Register</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
     <link rel="stylesheet" href="/vendor/inter/400.css" />
     <link rel="stylesheet" href="/vendor/inter/600.css" />
@@ -26,22 +26,23 @@
         <i class="fa-solid fa-crown login-crown"></i>
       </div>
       <div class="brand login-brand">Overlord</div>
-      <h2 class="login-title">Sign in</h2>
-      <p class="muted login-subtitle">
-        Access your Overlord
-      </p>
-      <form id="login-form">
+      <h2 class="login-title">Create Account</h2>
+      <p class="muted login-subtitle">Register for access</p>
+      <form id="register-form">
         <div class="form-group">
           <label class="label">Username</label>
           <div class="input-row input-animated">
             <i class="fa-solid fa-user"></i
             ><input
-              id="user"
+              id="reg-user"
               name="user"
               type="text"
               autocomplete="username"
               required
-              placeholder="Enter username"
+              minlength="3"
+              maxlength="32"
+              pattern="[a-zA-Z0-9_\-]+"
+              placeholder="Choose a username"
             />
           </div>
         </div>
@@ -50,27 +51,56 @@
           <div class="input-row input-animated">
             <i class="fa-solid fa-lock"></i
             ><input
-              id="pass"
+              id="reg-pass"
               name="pass"
               type="password"
-              autocomplete="current-password"
+              autocomplete="new-password"
               required
-              placeholder="Enter password"
+              minlength="6"
+              placeholder="Choose a password"
+            />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label">Confirm Password</label>
+          <div class="input-row input-animated">
+            <i class="fa-solid fa-lock"></i
+            ><input
+              id="reg-pass-confirm"
+              name="pass-confirm"
+              type="password"
+              autocomplete="new-password"
+              required
+              placeholder="Confirm password"
+            />
+          </div>
+        </div>
+        <div class="form-group" id="key-group" style="display: none">
+          <label class="label">Registration Key</label>
+          <div class="input-row input-animated">
+            <i class="fa-solid fa-key"></i
+            ><input
+              id="reg-key"
+              name="key"
+              type="text"
+              autocomplete="off"
+              placeholder="Enter your registration key"
             />
           </div>
         </div>
         <button type="submit" class="button primary full login-btn">
-          <span class="btn-text">Sign in</span>
-          <i class="fa-solid fa-arrow-right btn-icon"></i>
+          <span class="btn-text">Create Account</span>
+          <i class="fa-solid fa-user-plus btn-icon"></i>
         </button>
         <div id="error" class="error" aria-live="polite"></div>
+        <div id="success" class="success" aria-live="polite" style="display: none"></div>
       </form>
-      <div id="register-link" style="text-align: center; margin-top: 1rem; display: none">
-        <a href="/register.html" class="muted" style="font-size: 0.85rem; text-decoration: underline"
-          >Don't have an account? Register</a
+      <div style="text-align: center; margin-top: 1rem">
+        <a href="/" class="muted" style="font-size: 0.85rem; text-decoration: underline"
+          >Already have an account? Sign in</a
         >
       </div>
     </div>
-    <script src="/assets/login.js"></script>
+    <script src="/assets/register.js"></script>
   </body>
 </html>
