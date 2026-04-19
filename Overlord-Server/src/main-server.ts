@@ -4,6 +4,7 @@ import { logger } from "./logger";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs/promises";
+import { existsSync } from "node:fs";
 import { upsertClientRow, setOnlineState, listClients, markAllClientsOffline, getBuild, getBuildByTag, getAllBuilds, deleteExpiredBuilds, deleteBuild, getNotificationScreenshot, clearNotificationScreenshots, deleteClientRow, getClientIp, banIp, isIpBanned, clientExists, deleteExpiredSharedFiles, getChatHistory, insertChatMessage, getOnlineClientCountForUser, deleteExpiredChatMessages } from "./db";
 import { handleFrame, handleHello, handlePing, handlePong } from "./wsHandlers";
 import { getMessageByteLength, getMaxPayloadLimit, isAllowedClientMessageType } from "./wsValidation";
@@ -144,9 +145,24 @@ const isAuthorizedAgent = (req: Request, url: URL) =>
 
 const PORT = config.server.port;
 const HOST = config.server.host;
-const RUNTIME_ROOT = process.env.OVERLORD_ROOT?.trim()
-  ? path.resolve(process.env.OVERLORD_ROOT)
-  : fileURLToPath(new URL("..", import.meta.url));
+
+function resolveRuntimeRoot(): string {
+  if (process.env.OVERLORD_ROOT?.trim()) {
+    return path.resolve(process.env.OVERLORD_ROOT);
+  }
+  const fromMeta = fileURLToPath(new URL("..", import.meta.url));
+  if (existsSync(path.join(fromMeta, "public"))) return fromMeta;
+
+  const exeDir = path.dirname(process.execPath);
+  if (existsSync(path.join(exeDir, "public"))) return exeDir;
+
+  const exeParent = path.dirname(exeDir);
+  if (existsSync(path.join(exeParent, "public"))) return exeParent;
+
+  return process.cwd();
+}
+
+const RUNTIME_ROOT = resolveRuntimeRoot();
 const PUBLIC_ROOT = process.env.OVERLORD_PUBLIC_ROOT?.trim()
   ? path.resolve(process.env.OVERLORD_PUBLIC_ROOT)
   : path.join(RUNTIME_ROOT, "public");
