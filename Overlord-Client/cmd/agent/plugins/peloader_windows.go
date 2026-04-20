@@ -454,6 +454,12 @@ func (mm *MemoryModule) setupTLS(reason uint32) {
 	}
 
 	tebAddr := teb.CurrentTEB()
+	if tebAddr == 0 {
+		if tlsData != 0 {
+			_ = windows.VirtualFree(tlsData, 0, windows.MEM_RELEASE)
+		}
+		return
+	}
 	tlsArrayField := (*uintptr)(unsafe.Pointer(tebAddr + 0x58)) // ThreadLocalStoragePointer
 	oldArray := *tlsArrayField
 
@@ -538,6 +544,10 @@ func (mm *MemoryModule) SetupThreadTLS() func() {
 
 	ptrSize := unsafe.Sizeof(uintptr(0))
 	tebAddr := teb.CurrentTEB()
+	if tebAddr == 0 {
+		_ = windows.VirtualFree(tlsData, 0, windows.MEM_RELEASE)
+		return func() {}
+	}
 	tlsArrayField := (*uintptr)(unsafe.Pointer(tebAddr + 0x58))
 	oldArray := *tlsArrayField
 
@@ -572,8 +582,10 @@ func (mm *MemoryModule) SetupThreadTLS() func() {
 			_ = windows.VirtualFree(newArray, 0, windows.MEM_RELEASE)
 		}
 		tebNow := teb.CurrentTEB()
-		field := (*uintptr)(unsafe.Pointer(tebNow + 0x58))
-		*field = oldArray
+		if tebNow != 0 {
+			field := (*uintptr)(unsafe.Pointer(tebNow + 0x58))
+			*field = oldArray
+		}
 	}
 }
 
