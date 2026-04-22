@@ -29,7 +29,7 @@ If you just want it running fast, use this.
 ```yaml
 services:
   overlord-server:
-    image: ghcr.io/vxaboveground/overlord:latest
+    image: ${DOCKER_IMAGE:-ghcr.io/vxaboveground/overlord:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -38,36 +38,38 @@ services:
       cache_to:
         - type=local,dest=.docker-cache/buildx,mode=max
     container_name: overlord-server
-    ports:
-      - "5173:5173"
+    network_mode: host
     environment:
-      - OVERLORD_USER=admin
-      - OVERLORD_PASS=
-      - JWT_SECRET=
-      - OVERLORD_AGENT_TOKEN=
-      - PORT=5173
-      - HOST=0.0.0.0
-      - OVERLORD_TLS_CERT=/app/certs/server.crt
-      - OVERLORD_TLS_KEY=/app/certs/server.key
-      - OVERLORD_TLS_CA=
-      - OVERLORD_TLS_OFFLOAD=false
-      - OVERLORD_AUTH_COOKIE_SECURE=auto
-      - OVERLORD_TLS_CERTBOT_ENABLED=false
-      - OVERLORD_TLS_CERTBOT_LIVE_PATH=/etc/letsencrypt/live
-      - OVERLORD_TLS_CERTBOT_DOMAIN=
-      - OVERLORD_TLS_CERTBOT_CERT_FILE=fullchain.pem
-      - OVERLORD_TLS_CERTBOT_KEY_FILE=privkey.pem
-      - OVERLORD_TLS_CERTBOT_CA_FILE=chain.pem
-      - OVERLORD_CLIENT_BUILD_CACHE_DIR=/app/client-build-cache
-      - OVERLORD_FILE_UPLOAD_INTENT_TTL_MS=1800000
-      - OVERLORD_FILE_UPLOAD_PULL_TTL_MS=1800000
+      PORT: ${PORT:-5173}
+      HOST: ${HOST:-0.0.0.0}
+      OVERLORD_USER: ${OVERLORD_USER:-admin}
+      OVERLORD_PASS: ${OVERLORD_PASS:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      OVERLORD_AGENT_TOKEN: ${OVERLORD_AGENT_TOKEN:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      OVERLORD_TLS_CERT: ${OVERLORD_TLS_CERT:-/app/certs/server.crt}
+      OVERLORD_TLS_KEY: ${OVERLORD_TLS_KEY:-/app/certs/server.key}
+      OVERLORD_TLS_CA: ${OVERLORD_TLS_CA:-}
+      OVERLORD_TLS_OFFLOAD: ${OVERLORD_TLS_OFFLOAD:-false}
+      OVERLORD_AUTH_COOKIE_SECURE: ${OVERLORD_AUTH_COOKIE_SECURE:-auto}
+      OVERLORD_TLS_CERTBOT_ENABLED: ${OVERLORD_TLS_CERTBOT_ENABLED:-false}
+      OVERLORD_TLS_CERTBOT_LIVE_PATH: ${OVERLORD_TLS_CERTBOT_LIVE_PATH:-/etc/letsencrypt/live}
+      OVERLORD_TLS_CERTBOT_DOMAIN: ${OVERLORD_TLS_CERTBOT_DOMAIN:-}
+      OVERLORD_TLS_CERTBOT_CERT_FILE: ${OVERLORD_TLS_CERTBOT_CERT_FILE:-fullchain.pem}
+      OVERLORD_TLS_CERTBOT_KEY_FILE: ${OVERLORD_TLS_CERTBOT_KEY_FILE:-privkey.pem}
+      OVERLORD_TLS_CERTBOT_CA_FILE: ${OVERLORD_TLS_CERTBOT_CA_FILE:-chain.pem}
+      OVERLORD_CLIENT_BUILD_CACHE_DIR: ${OVERLORD_CLIENT_BUILD_CACHE_DIR:-/app/client-build-cache}
+      OVERLORD_FILE_UPLOAD_INTENT_TTL_MS: ${OVERLORD_FILE_UPLOAD_INTENT_TTL_MS:-1800000}
+      OVERLORD_FILE_UPLOAD_PULL_TTL_MS: ${OVERLORD_FILE_UPLOAD_PULL_TTL_MS:-1800000}
     volumes:
       - overlord-data:/app/data
       - overlord-certs:/app/certs
       - overlord-client-build-cache:/app/client-build-cache
+      - overlord-plugins:/app/plugins
     restart: unless-stopped
-    networks:
-      - overlord-network
+    init: true
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "curl -f ${OVERLORD_HEALTHCHECK_URL:-https://localhost:5173/health} >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -75,14 +77,11 @@ services:
       retries: 3
       start_period: 40s
 
-networks:
-  overlord-network:
-    driver: bridge
-
 volumes:
   overlord-data:
   overlord-certs:
   overlord-client-build-cache:
+  overlord-plugins:
 ```
 
 2. Start it:
