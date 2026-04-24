@@ -58,3 +58,7 @@ func HVNCInputMouseWheel(delta int32) error {
 func HVNCAutoStartExplorer() error {
 	return errors.New("HVNC not supported on this platform")
 }
+
+func HVNCKillAll() error {
+	return errors.New("HVNC not supported on this platform")
+}

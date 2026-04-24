@@ -55,6 +55,7 @@ import { checkFeatureAccess } from "./feature-gate.js";
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
   const commandsBtn = document.getElementById("commandsBtn");
+  const killAllBtn = document.getElementById("killAllBtn");
   const fullscreenBtn = document.getElementById("fullscreenBtn");
   const mouseCtrl = document.getElementById("mouseCtrl");
   const kbdCtrl = document.getElementById("kbdCtrl");
@@ -593,6 +594,11 @@ import { checkFeatureAccess } from "./feature-gate.js";
     setStreamState("stopping", "Stopping stream");
     sendCmd("hvnc_stop", {});
   });
+  if (killAllBtn) {
+    killAllBtn.addEventListener("click", function () {
+      sendCmd("hvnc_kill_all", {});
+    });
+  }
   fullscreenBtn.addEventListener("click", function () {
     if (canvasContainer.requestFullscreen) {
       canvasContainer.requestFullscreen();
