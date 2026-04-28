@@ -115,11 +115,11 @@ RUN mkdir -p certs public data
 RUN bun run build:css && bun run vendor \
     && test -s ./public/assets/tailwind.css && test -d ./public/vendor/fontawesome
 
-# Compile a standalone production binary (sharp is external — kept in node_modules)
-RUN BUN_TARGET="bun-linux-x64" \
-    && if [ "${TARGETARCH}" = "arm64" ]; then BUN_TARGET="bun-linux-arm64"; fi \
-    && bun build --production --external sharp src/index.ts \
-       --compile --target "$BUN_TARGET" --outfile overlord-server
+# NOTE: We intentionally do NOT use `bun build --compile` here.
+# The compiled standalone binary runs from a virtual bunfs filesystem that
+# cannot reliably load native modules like `sharp` from /app/node_modules,
+# even when marked --external. Running the TS entrypoint directly with bun
+# keeps normal Node-style module resolution and lets sharp load correctly.
 
 # Expose the default port
 EXPOSE 5173
@@ -132,5 +132,5 @@ ENV NODE_ENV=production
 ENV OVERLORD_ROOT=/app
 ENV NODE_PATH=/app/node_modules
 
-# Run the compiled production binary
-CMD ["./overlord-server"]
+# Run the server directly with bun (no standalone-binary compile step)
+CMD ["bun", "run", "src/index.ts"]
