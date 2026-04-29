@@ -429,6 +429,7 @@ async function startServer() {
     },
     plugin: {
       PLUGIN_ROOT,
+      PUBLIC_ROOT,
       pluginState,
       pluginLoadedByClient,
       pluginLoadingByClient,

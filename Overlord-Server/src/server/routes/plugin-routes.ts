@@ -30,6 +30,7 @@ type PluginState = {
 
 type PluginRouteDeps = {
   PLUGIN_ROOT: string;
+  PUBLIC_ROOT: string;
   pluginState: PluginState;
   pluginLoadedByClient: Map<string, Set<string>>;
   pluginLoadingByClient: Map<string, Set<string>>;
@@ -60,6 +61,14 @@ export async function handlePluginRoutes(
     !url.pathname.match(/^\/api\/clients\/.+\/plugins/)
   ) {
     return null;
+  }
+
+  async function serveLoginOrUnauthorized(): Promise<Response> {
+    const loginFile = Bun.file(`${deps.PUBLIC_ROOT}/login.html`);
+    if (await loginFile.exists()) {
+      return new Response(loginFile, { headers: deps.secureHeaders(deps.mimeType("/login.html")) });
+    }
+    return new Response("Unauthorized", { status: 401 });
   }
 
   if (req.method === "GET" && url.pathname === "/api/plugins") {
@@ -699,6 +708,12 @@ export async function handlePluginRoutes(
 
   const pluginFrameMatch = url.pathname.match(/^\/plugins\/([^/]+)\/frame$/);
   if (req.method === "GET" && pluginFrameMatch) {
+    const user = await authenticateRequest(req);
+    if (!user) return serveLoginOrUnauthorized();
+    if (user.role === "viewer") {
+      return new Response("Forbidden: Viewers cannot access interactive features", { status: 403 });
+    }
+
     let pluginId = "";
     try {
       pluginId = deps.sanitizePluginId(pluginFrameMatch[1]);
@@ -728,6 +743,12 @@ export async function handlePluginRoutes(
 
   const pluginPageMatch = url.pathname.match(/^\/plugins\/([^/]+)$/);
   if (req.method === "GET" && pluginPageMatch) {
+    const user = await authenticateRequest(req);
+    if (!user) return serveLoginOrUnauthorized();
+    if (user.role === "viewer") {
+      return new Response("Forbidden: Viewers cannot access interactive features", { status: 403 });
+    }
+
     let pluginId = "";
     try {
       pluginId = deps.sanitizePluginId(pluginPageMatch[1]);
@@ -736,6 +757,9 @@ export async function handlePluginRoutes(
     }
 
     const clientId = url.searchParams.get("clientId") || "";
+    if (clientId && !canUserAccessClient(user.userId, user.role, clientId)) {
+      return new Response("Forbidden: Client access denied", { status: 403 });
+    }
 
     const htmlFile = path.join(deps.PLUGIN_ROOT, pluginId, "assets", `${pluginId}.html`);
     const file = Bun.file(htmlFile);
@@ -798,6 +822,12 @@ export async function handlePluginRoutes(
 
   const pluginAssetMatch = url.pathname.match(/^\/plugins\/([^/]+)\/assets\/(.+)$/);
   if (req.method === "GET" && pluginAssetMatch) {
+    const user = await authenticateRequest(req);
+    if (!user) return new Response("Unauthorized", { status: 401 });
+    if (user.role === "viewer") {
+      return new Response("Forbidden: Viewers cannot access interactive features", { status: 403 });
+    }
+
     const [, pluginId, assetPath] = pluginAssetMatch;
     let decodedPath = assetPath;
     try {
