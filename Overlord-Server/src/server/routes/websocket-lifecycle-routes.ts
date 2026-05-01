@@ -19,6 +19,7 @@ import type { ClientInfo } from "../../types";
 import { clearClientSyncState, handleFrame, handleHello, handlePing, handlePong } from "../../wsHandlers";
 import { getMaxPayloadLimit, getMessageByteLength, isAllowedClientMessageType } from "../../wsValidation";
 import { stopAllProxiesForClient } from "../socks5-proxy-manager";
+import { notifyAgentRtcClose, relayAgentRtcToViewer } from "../ws-rtc-signaling";
 
 type PendingScript = {
   timeout: ReturnType<typeof setTimeout>;
@@ -41,6 +42,7 @@ type WsLifecycleDeps = {
   hvncStreamingState: Map<string, unknown>;
   webcamStreamingState: Map<string, unknown>;
   getNotificationConfig: () => { keywords?: string[]; minIntervalMs?: number; clipboardEnabled?: boolean };
+  getIceServers: () => { urls: string | string[]; username?: string; credential?: string }[];
   handleDashboardViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleConsoleViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
   handleRemoteDesktopViewerOpen: (ws: ServerWebSocket<SocketData>) => void;
@@ -448,6 +450,7 @@ export async function handleWebSocketMessage(
                 minIntervalMs: notificationConfig.minIntervalMs || 8000,
                 clipboardEnabled: notificationConfig.clipboardEnabled || false,
               },
+              iceServers: deps.getIceServers(),
             }),
           );
         } catch (sendErr) {
@@ -645,6 +648,10 @@ export async function handleWebSocketMessage(
         }
         break;
       }
+      case "rtc_answer":
+      case "rtc_ice":
+        relayAgentRtcToViewer(payload as any);
+        break;
       case "disconnect_info": {
         const reason = typeof (payload as any).reason === "string" ? (payload as any).reason : "";
         const detail = typeof (payload as any).detail === "string" ? (payload as any).detail : "";
@@ -686,12 +693,18 @@ export function handleWebSocketClose(
 
   if (role === "rd_viewer") {
     let removedClientId = clientId;
+    let removedSessionId = "";
     for (const [sid, sess] of sessionManager.getAllRdSessions().entries()) {
       if (sess.viewer === ws) {
         removedClientId = sess.clientId;
+        removedSessionId = sid;
         sessionManager.deleteRdSession(sid);
         break;
       }
+    }
+
+    if (removedSessionId) {
+      notifyAgentRtcClose(removedClientId, removedSessionId);
     }
 
     const stillViewing = sessionManager.hasRdSessionsForClient(removedClientId);

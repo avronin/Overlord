@@ -168,6 +168,20 @@
                 height: auto;
               "
             ></canvas>
+            <video
+              id="frameVideo"
+              autoplay
+              muted
+              playsinline
+              class="bg-slate-950"
+              style="
+                display: none;
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+              "
+            ></video>
           </div>
         </div>
         <style>
@@ -189,7 +203,8 @@
             flex-direction: column;
             background: #000;
           }
-          #canvasContainer:fullscreen #frameCanvas {
+          #canvasContainer:fullscreen #frameCanvas,
+          #canvasContainer:fullscreen #frameVideo {
             width: 100%;
             height: 100%;
             object-fit: contain;

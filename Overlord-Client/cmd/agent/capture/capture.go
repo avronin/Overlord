@@ -19,6 +19,7 @@ import (
 	"time"
 
 	rt "overlord-client/cmd/agent/runtime"
+	rtcbridge "overlord-client/cmd/agent/webrtc"
 	"overlord-client/cmd/agent/wire"
 )
 
@@ -573,6 +574,13 @@ func buildFrame(img *image.RGBA, display int, quality int) (wire.Frame, time.Dur
 				prevMu.Unlock()
 				lastKeyframe.Store(now.UnixNano())
 				statFullFrames.Add(1)
+				if rtcbridge.ActivePeerCount() > 0 {
+					fps := activeH264FPS()
+					if fps < 1 {
+						fps = 30
+					}
+					rtcbridge.BroadcastH264(h264Bytes, int64(time.Second)/int64(fps))
+				}
 				return wire.Frame{Type: "frame", Header: wire.FrameHeader{Monitor: display, FPS: 0, Format: "h264"}, Data: h264Bytes}, time.Since(encStart), nil
 			}
 			h264WarnOnce.Do(func() {

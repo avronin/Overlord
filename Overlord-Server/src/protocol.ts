@@ -51,6 +51,7 @@ export type HelloAck = {
     minIntervalMs?: number;
     clipboardEnabled?: boolean;
   };
+  iceServers?: { urls: string | string[]; username?: string; credential?: string }[];
 };
 export type Ping = { type: "ping"; ts?: number };
 export type Pong = { type: "pong"; ts?: number };

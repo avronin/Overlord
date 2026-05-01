@@ -104,6 +104,7 @@ import {
   sendHVNCCommand,
   stopConsoleOnTarget,
 } from "./server/ws-console-rd-hvnc";
+import { buildIceServers } from "./server/ws-rtc-signaling";
 import {
   handleFileBrowserMessage as forwardFileBrowserMessage,
   handleFileBrowserViewerMessage,
@@ -518,6 +519,7 @@ async function startServer() {
     hvncStreamingState,
     webcamStreamingState,
     getNotificationConfig,
+    getIceServers: buildIceServers,
     handleConsoleViewerOpen,
     handleRemoteDesktopViewerOpen,
     handleWebcamViewerOpen,

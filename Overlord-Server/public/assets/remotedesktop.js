@@ -38,6 +38,7 @@ import { checkFeatureAccess } from "./feature-gate.js";
   const codecH264 = document.getElementById("codecH264");
   const codecMode = document.getElementById("codecMode");
   const canvas = document.getElementById("frameCanvas");
+  const videoEl = document.getElementById("frameVideo");
   const canvasContainer = document.getElementById("canvasContainer");
   const ctx = canvas.getContext("2d");
   const agentFps = document.getElementById("agentFps");
@@ -222,6 +223,216 @@ import { checkFeatureAccess } from "./feature-gate.js";
     resetH264RuntimeState();
     h264RecoveryAttempts = 0;
     h264LastDecodeWarnAt = 0;
+  }
+
+  const RTC_CONNECT_TIMEOUT_MS = 6000;
+  const RTC_INPUT_TYPES = new Map([
+    ["mouse_move", "desktop_mouse_move"],
+    ["mouse_down", "desktop_mouse_down"],
+    ["mouse_up", "desktop_mouse_up"],
+    ["mouse_wheel", "desktop_mouse_wheel"],
+    ["key_down", "desktop_key_down"],
+    ["key_up", "desktop_key_up"],
+    ["text_input", "desktop_text"],
+  ]);
+  let rtcPc = null;
+  let rtcDc = null;
+  let rtcSessionId = null;
+  let rtcConnectTimer = null;
+  let rtcMode = "ws"; // "ws" | "rtc"
+  let rtcAttempted = false;
+
+  async function fetchIceConfig() {
+    const res = await fetch("/api/ice-servers", { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`ice-servers ${res.status}`);
+    const data = await res.json();
+    return {
+      iceServers: Array.isArray(data?.iceServers) ? data.iceServers : [],
+      iceTransportPolicy: data?.iceTransportPolicy === "relay" ? "relay" : "all",
+    };
+  }
+
+  async function initWebRTC() {
+    if (rtcAttempted) return;
+    rtcAttempted = true;
+    if (typeof RTCPeerConnection !== "function") {
+      console.info("rd: RTCPeerConnection unavailable, staying on WS frame path");
+      return;
+    }
+    let cfg;
+    try {
+      cfg = await fetchIceConfig();
+    } catch (err) {
+      console.warn("rd: ice config fetch failed, staying on WS", err);
+      return;
+    }
+    if (!cfg.iceServers.length) {
+      console.warn("rd: no ICE servers configured, staying on WS");
+      return;
+    }
+    rtcSessionId = (crypto.randomUUID && crypto.randomUUID()) ||
+      `rd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+    rtcPc = new RTCPeerConnection({
+      iceServers: cfg.iceServers,
+      iceTransportPolicy: cfg.iceTransportPolicy,
+      bundlePolicy: "max-bundle",
+    });
+
+    rtcPc.addTransceiver("video", { direction: "recvonly" });
+    rtcDc = rtcPc.createDataChannel("input", {
+      ordered: false,
+      maxRetransmits: 0,
+    });
+    rtcDc.binaryType = "arraybuffer";
+
+    rtcPc.addEventListener("icecandidate", (ev) => {
+      if (!ev.candidate || !rtcSessionId) return;
+      sendSignal({
+        type: "rtc_ice",
+        sessionId: rtcSessionId,
+        candidate: ev.candidate.candidate,
+        sdpMid: ev.candidate.sdpMid || "",
+        sdpMLineIndex: ev.candidate.sdpMLineIndex || 0,
+      });
+    });
+
+    rtcPc.addEventListener("track", (ev) => {
+      if (!ev.streams || !ev.streams[0]) return;
+      videoEl.srcObject = ev.streams[0];
+      videoEl.play().catch(() => {});
+    });
+
+    rtcPc.addEventListener("connectionstatechange", () => {
+      const state = rtcPc?.connectionState;
+      console.debug("rd: rtc state", state);
+      if (state === "connected") {
+        clearRtcConnectTimer();
+        switchToRtcMode();
+      } else if (state === "failed" || state === "closed" || state === "disconnected") {
+        teardownWebRTC(state === "failed");
+      }
+    });
+
+    try {
+      const offer = await rtcPc.createOffer();
+      await rtcPc.setLocalDescription(offer);
+      sendSignal({
+        type: "rtc_offer",
+        sessionId: rtcSessionId,
+        sdp: rtcPc.localDescription.sdp,
+      });
+    } catch (err) {
+      console.warn("rd: offer creation failed", err);
+      teardownWebRTC(true);
+      return;
+    }
+
+    rtcConnectTimer = setTimeout(() => {
+      if (rtcPc && rtcPc.connectionState !== "connected") {
+        console.warn("rd: webrtc connect timed out, falling back to WS frames");
+        teardownWebRTC(true);
+      }
+    }, RTC_CONNECT_TIMEOUT_MS);
+  }
+
+  function sendSignal(payload) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    try { ws.send(encodeMsgpack(payload)); } catch (err) {
+      console.warn("rd: signal send failed", err);
+    }
+  }
+
+  function clearRtcConnectTimer() {
+    if (rtcConnectTimer) {
+      clearTimeout(rtcConnectTimer);
+      rtcConnectTimer = null;
+    }
+  }
+
+  function switchToRtcMode() {
+    if (rtcMode === "rtc") return;
+    rtcMode = "rtc";
+    if (videoEl) videoEl.style.display = "block";
+    if (canvas) canvas.style.display = "none";
+    // The capture loop stops the WebCodecs decoder so we don't burn cycles
+    // decoding frames we won't render.
+    destroyVideoDecoder();
+    setCodecModeLabel("h264", "webrtc");
+  }
+
+  function switchToWsMode() {
+    if (rtcMode === "ws") return;
+    rtcMode = "ws";
+    if (videoEl) {
+      videoEl.style.display = "none";
+      try { videoEl.srcObject = null; } catch {}
+    }
+    if (canvas) canvas.style.display = "block";
+  }
+
+  function teardownWebRTC(resetAttempt) {
+    clearRtcConnectTimer();
+    if (rtcDc) {
+      try { rtcDc.close(); } catch {}
+      rtcDc = null;
+    }
+    if (rtcPc) {
+      try { rtcPc.close(); } catch {}
+      rtcPc = null;
+    }
+    rtcSessionId = null;
+    switchToWsMode();
+    // Allow another negotiation attempt on the next reconnect, but never
+    // hammer the server with retries inside one WS lifetime.
+    if (resetAttempt) {
+      rtcAttempted = false;
+    }
+  }
+
+  async function handleRtcAnswer(msg) {
+    if (!rtcPc || !msg || msg.sessionId !== rtcSessionId || !msg.sdp) return;
+    try {
+      await rtcPc.setRemoteDescription({ type: "answer", sdp: String(msg.sdp) });
+    } catch (err) {
+      console.warn("rd: setRemoteDescription failed", err);
+      teardownWebRTC(true);
+    }
+  }
+
+  async function handleRtcIceFromAgent(msg) {
+    if (!rtcPc || !msg || msg.sessionId !== rtcSessionId || !msg.candidate) return;
+    try {
+      await rtcPc.addIceCandidate({
+        candidate: String(msg.candidate),
+        sdpMid: msg.sdpMid || "",
+        sdpMLineIndex: Number(msg.sdpMLineIndex) || 0,
+      });
+    } catch (err) {
+      console.debug("rd: addIceCandidate failed", err);
+    }
+  }
+
+  // sendInputViaPreferred routes input commands over the DataChannel when
+  // the peer is connected, otherwise falls through to the WS path.
+  function sendInputViaPreferred(viewerType, payload) {
+    if (rtcMode === "rtc" && rtcDc && rtcDc.readyState === "open") {
+      const commandType = RTC_INPUT_TYPES.get(viewerType);
+      if (commandType) {
+        try {
+          rtcDc.send(encodeMsgpack({
+            type: "command",
+            commandType,
+            payload: payload || {},
+            id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()),
+          }));
+          return true;
+        } catch (err) {
+          console.debug("rd: dc send failed, falling back to ws", err);
+        }
+      }
+    }
+    return false;
   }
 
   const storedCodecPref = localStorage.getItem(codecPrefKey);
@@ -551,6 +762,12 @@ import { checkFeatureAccess } from "./feature-gate.js";
   function sendCmd(type, payload) {
     if (!activeClientId) {
       console.warn("No active client selected");
+      return;
+    }
+    // Mouse / keyboard hot-path: try the DataChannel first. Falls through
+    // to the WS path if the peer isn't up yet, so first-keystroke after
+    // negotiation still lands somewhere.
+    if (sendInputViaPreferred(type, payload)) {
       return;
     }
     if (ws.readyState !== WebSocket.OPEN) {
@@ -1143,6 +1360,13 @@ import { checkFeatureAccess } from "./feature-gate.js";
       const buf = new Uint8Array(ev.data);
       if (isFramePacket(buf)) {
         markFrameReceived();
+        // While the WebRTC video track is rendering, skip the canvas decode
+        // path entirely — the agent is still tee-ing frames here for the
+        // fallback case but we don't want to burn CPU drawing them.
+        if (rtcMode === "rtc") {
+          updateFpsDisplay(buf[5]);
+          return;
+        }
         // Coalesce bursty arrivals so the renderer catches up to the newest frame.
         pendingFrame = buf;
         flushPendingFrame();
@@ -1152,6 +1376,14 @@ import { checkFeatureAccess } from "./feature-gate.js";
       const msg = decodeMsgpack(buf);
       if (msg && msg.type === "status" && msg.status) {
         handleStatus(msg);
+        return;
+      }
+      if (msg && msg.type === "rtc_answer") {
+        handleRtcAnswer(msg);
+        return;
+      }
+      if (msg && msg.type === "rtc_ice") {
+        handleRtcIceFromAgent(msg);
         return;
       }
       if (msg && msg.type === "input_latency") {
@@ -1202,17 +1434,22 @@ import { checkFeatureAccess } from "./feature-gate.js";
         });
       }
     });
+    // Kick off WebRTC negotiation as soon as signaling is up. Best-effort —
+    // failures here just leave us on the canvas/WS path.
+    initWebRTC().catch((err) => console.warn("rd: initWebRTC threw", err));
   });
 
   ws.addEventListener("close", function () {
     desiredStreaming = false;
     disconnectAudio();
     destroyVideoDecoder();
+    teardownWebRTC(true);
     setStreamState("disconnected", "Disconnected");
   });
 
   ws.addEventListener("error", function () {
     destroyVideoDecoder();
+    teardownWebRTC(true);
     setStreamState("error", "WebSocket error");
   });
 
@@ -1238,18 +1475,24 @@ import { checkFeatureAccess } from "./feature-gate.js";
   }
 
   function getCanvasPoint(e) {
-    let rect = canvas.getBoundingClientRect();
+    // In RTC mode the <video> is the visible surface; otherwise the canvas
+    // is. We translate the pointer into the source pixel space the agent
+    // expects, which is the captured frame width/height.
+    const surface = rtcMode === "rtc" && videoEl && videoEl.style.display !== "none"
+      ? videoEl
+      : canvas;
+    let rect = surface.getBoundingClientRect();
     if (!rect.width || !rect.height) {
       rect = canvasContainer?.getBoundingClientRect() || rect;
     }
-    const targetW = canvas.width || frameWidth;
-    const targetH = canvas.height || frameHeight;
-    if (!rect.width || !rect.height || !targetW || !targetH) return null;
-    let x = ((e.clientX - rect.left) / rect.width) * targetW;
-    let y = ((e.clientY - rect.top) / rect.height) * targetH;
+    const sourceW = (rtcMode === "rtc" ? (videoEl?.videoWidth || frameWidth) : (canvas.width || frameWidth));
+    const sourceH = (rtcMode === "rtc" ? (videoEl?.videoHeight || frameHeight) : (canvas.height || frameHeight));
+    if (!rect.width || !rect.height || !sourceW || !sourceH) return null;
+    let x = ((e.clientX - rect.left) / rect.width) * sourceW;
+    let y = ((e.clientY - rect.top) / rect.height) * sourceH;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    x = Math.max(0, Math.min(targetW - 1, Math.floor(x)));
-    y = Math.max(0, Math.min(targetH - 1, Math.floor(y)));
+    x = Math.max(0, Math.min(sourceW - 1, Math.floor(x)));
+    y = Math.max(0, Math.min(sourceH - 1, Math.floor(y)));
     return { x, y };
   }
 
@@ -1278,12 +1521,23 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
 
     lastMoveSentAt = now;
-    if (ws.bufferedAmount <= inputBackpressureBytes) {
+    // When the DataChannel is up we route there regardless of WS
+    // backpressure. The DC has its own buffer and on a flaky uplink the WS
+    // may be saturated even though the (UDP) DC is fine.
+    const dcOpen = rtcMode === "rtc" && rtcDc && rtcDc.readyState === "open";
+    if (dcOpen || ws.bufferedAmount <= inputBackpressureBytes) {
       sendCmd("mouse_move", sendPoint);
     }
   }
 
-  canvas.addEventListener("mousemove", function (e) {
+  function focusActiveSurface() {
+    const surface = rtcMode === "rtc" && videoEl && videoEl.style.display !== "none"
+      ? videoEl
+      : canvas;
+    surface.focus({ preventScroll: true });
+  }
+
+  function onSurfaceMouseMove(e) {
     if (!mouseCtrl.checked) return;
     const pt = getCanvasPoint(e);
     if (!pt) return;
@@ -1291,10 +1545,10 @@ import { checkFeatureAccess } from "./feature-gate.js";
     if (!moveTimer) {
       flushMouseMove();
     }
-  });
-  canvas.addEventListener("mousedown", function (e) {
+  }
+  function onSurfaceMouseDown(e) {
     if (!mouseCtrl.checked) return;
-    canvas.focus({ preventScroll: true });
+    focusActiveSurface();
     const pt = getCanvasPoint(e);
     if (pt) {
       pendingMove = pt;
@@ -1303,8 +1557,8 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
     sendCmd("mouse_down", { button: e.button, ...(pt || {}) });
     e.preventDefault();
-  });
-  canvas.addEventListener("mouseup", function (e) {
+  }
+  function onSurfaceMouseUp(e) {
     if (!mouseCtrl.checked) return;
     const pt = getCanvasPoint(e);
     if (pt) {
@@ -1314,24 +1568,19 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
     sendCmd("mouse_up", { button: e.button, ...(pt || {}) });
     e.preventDefault();
-  });
-  canvas.addEventListener("contextmenu", function (e) {
+  }
+  function onSurfaceContextMenu(e) {
     e.preventDefault();
-  });
-  canvas.addEventListener("wheel", function (e) {
+  }
+  function onSurfaceWheel(e) {
     if (!mouseCtrl.checked) return;
     const pt = getCanvasPoint(e);
     if (!pt) return;
     const delta = Math.max(-120, Math.min(120, Math.round(-e.deltaY)));
     sendCmd("mouse_wheel", { delta, x: pt.x, y: pt.y });
     e.preventDefault();
-  }, { passive: false });
-
-  canvas.setAttribute("tabindex", "0");
-  canvas.addEventListener("click", function () {
-    canvas.focus({ preventScroll: true });
-  });
-  canvas.addEventListener("keydown", function (e) {
+  }
+  function onSurfaceKeyDown(e) {
     if (!kbdCtrl.checked) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && typeof e.key === "string" && e.key.length === 1) {
       sendCmd("text_input", { text: e.key });
@@ -1340,8 +1589,8 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
     sendCmd("key_down", { key: e.key, code: e.code });
     e.preventDefault();
-  });
-  canvas.addEventListener("keyup", function (e) {
+  }
+  function onSurfaceKeyUp(e) {
     if (!kbdCtrl.checked) return;
     if (!e.ctrlKey && !e.metaKey && !e.altKey && typeof e.key === "string" && e.key.length === 1) {
       e.preventDefault();
@@ -1349,7 +1598,23 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
     sendCmd("key_up", { key: e.key, code: e.code });
     e.preventDefault();
-  });
+  }
+
+  // Both surfaces (canvas + video) share the same input handlers so the
+  // user gets identical pointer/keyboard behaviour regardless of whether
+  // we're rendering via WebRTC or the WS canvas path.
+  for (const surface of [canvas, videoEl]) {
+    if (!surface) continue;
+    surface.setAttribute("tabindex", "0");
+    surface.addEventListener("mousemove", onSurfaceMouseMove);
+    surface.addEventListener("mousedown", onSurfaceMouseDown);
+    surface.addEventListener("mouseup", onSurfaceMouseUp);
+    surface.addEventListener("contextmenu", onSurfaceContextMenu);
+    surface.addEventListener("wheel", onSurfaceWheel, { passive: false });
+    surface.addEventListener("click", focusActiveSurface);
+    surface.addEventListener("keydown", onSurfaceKeyDown);
+    surface.addEventListener("keyup", onSurfaceKeyUp);
+  }
 
   function stopOnExit() {
     if (ws.readyState === WebSocket.OPEN && desiredStreaming) {
@@ -1358,6 +1623,7 @@ import { checkFeatureAccess } from "./feature-gate.js";
     }
     disconnectAudio();
     destroyVideoDecoder();
+    teardownWebRTC(true);
   }
 
   window.addEventListener("beforeunload", stopOnExit);

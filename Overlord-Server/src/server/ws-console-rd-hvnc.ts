@@ -12,6 +12,7 @@ import * as sessionManager from "../sessions/sessionManager";
 import type { ConsoleSession, RemoteDesktopViewer, SocketData } from "../sessions/types";
 import type { ClientInfo } from "../types";
 import { canUserAccessClient } from "../users";
+import { relayViewerRtcToAgent } from "./ws-rtc-signaling";
 
 let _cachedInjectionDll: Uint8Array | null = null;
 let _dllCachePath: string | null = null;
@@ -367,6 +368,11 @@ export function handleRemoteDesktopViewerMessage(ws: ServerWebSocket<SocketData>
 
   logger.debug(`[rd] inbound viewer msg type=${payload.type} client=${clientId}`);
   switch (payload.type) {
+    case "rtc_offer":
+    case "rtc_ice":
+    case "rtc_close":
+      relayViewerRtcToAgent(ws, payload as Record<string, unknown>);
+      return;
     case "desktop_start":
       if (!state.isStreaming) {
         if (target.os === "darwin" && target.permissions) {

@@ -7,6 +7,7 @@ import (
 
 	"overlord-client/cmd/agent/capture"
 	"overlord-client/cmd/agent/runtime"
+	"overlord-client/cmd/agent/webrtc"
 )
 
 type Dispatcher struct {
@@ -40,6 +41,55 @@ func (d *Dispatcher) Dispatch(ctx context.Context, envelope map[string]interface
 		return HandlePong(ctx, d.Env, envelope)
 	case "frame_ack":
 		capture.ReleaseFrameSlot()
+		return nil
+	case "rtc_offer":
+		sessionID, _ := envelope["sessionId"].(string)
+		sdp, _ := envelope["sdp"].(string)
+		if sessionID == "" || sdp == "" {
+			log.Printf("dispatcher: rtc_offer missing sessionId or sdp")
+			return nil
+		}
+		if err := webrtc.HandleOffer(ctx, d.Env.Conn, sessionID, sdp); err != nil {
+			log.Printf("dispatcher: rtc_offer failed for session=%s: %v", sessionID, err)
+		}
+		return nil
+	case "rtc_ice":
+		sessionID, _ := envelope["sessionId"].(string)
+		candidate, _ := envelope["candidate"].(string)
+		sdpMid, _ := envelope["sdpMid"].(string)
+		idx := uint16(0)
+		switch v := envelope["sdpMLineIndex"].(type) {
+		case int8:
+			idx = uint16(v)
+		case int16:
+			idx = uint16(v)
+		case int32:
+			idx = uint16(v)
+		case int64:
+			idx = uint16(v)
+		case uint8:
+			idx = uint16(v)
+		case uint16:
+			idx = v
+		case uint32:
+			idx = uint16(v)
+		case uint64:
+			idx = uint16(v)
+		case float64:
+			idx = uint16(v)
+		}
+		if sessionID == "" || candidate == "" {
+			return nil
+		}
+		if err := webrtc.HandleICECandidate(sessionID, candidate, sdpMid, idx); err != nil {
+			log.Printf("dispatcher: rtc_ice failed for session=%s: %v", sessionID, err)
+		}
+		return nil
+	case "rtc_close":
+		sessionID, _ := envelope["sessionId"].(string)
+		if sessionID != "" {
+			webrtc.ClosePeer(sessionID)
+		}
 		return nil
 	case "command":
 		cmdType, _ := envelope["commandType"].(string)

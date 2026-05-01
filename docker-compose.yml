@@ -43,6 +43,14 @@ services:
       OVERLORD_CLIENT_BUILD_CACHE_DIR: ${OVERLORD_CLIENT_BUILD_CACHE_DIR:-/app/client-build-cache}
       OVERLORD_FILE_UPLOAD_INTENT_TTL_MS: ${OVERLORD_FILE_UPLOAD_INTENT_TTL_MS:-1800000}
       OVERLORD_FILE_UPLOAD_PULL_TTL_MS: ${OVERLORD_FILE_UPLOAD_PULL_TTL_MS:-1800000}
+      # WebRTC ICE configuration handed to the browser viewer for the
+      # remote-desktop peer connection. Defaults assume the coturn service
+      # below is reachable on the host. Set OVERLORD_PUBLIC_HOST to your
+      # public IP / domain so external viewers can resolve TURN.
+      OVERLORD_STUN_URL: ${OVERLORD_STUN_URL:-stun:${OVERLORD_PUBLIC_HOST:-localhost}:3478}
+      OVERLORD_TURN_URL: ${OVERLORD_TURN_URL:-turn:${OVERLORD_PUBLIC_HOST:-localhost}:3478}
+      OVERLORD_TURN_USERNAME: ${OVERLORD_TURN_USERNAME:-overlord}
+      OVERLORD_TURN_CREDENTIAL: ${OVERLORD_TURN_CREDENTIAL:-changeme}
     volumes:
       - overlord-data:/app/data
       - overlord-certs:/app/certs
@@ -63,6 +71,37 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # coturn provides STUN+TURN for the browser viewer's WebRTC peer
+  # connection to the agent. Host networking matches overlord-server so the
+  # advertised relay IP ends up being the host's IP — set
+  # OVERLORD_PUBLIC_HOST in your env to the public hostname/IP that browsers
+  # can reach. Static credentials are pulled from the same env vars the
+  # server exposes via /api/ice-servers.
+  coturn:
+    image: coturn/coturn:4.6.2
+    container_name: overlord-coturn
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    environment:
+      OVERLORD_TURN_USERNAME: ${OVERLORD_TURN_USERNAME:-overlord}
+      OVERLORD_TURN_CREDENTIAL: ${OVERLORD_TURN_CREDENTIAL:-changeme}
+      OVERLORD_PUBLIC_HOST: ${OVERLORD_PUBLIC_HOST:-}
+    command:
+      - "-n"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--listening-port=3478"
+      - "--lt-cred-mech"
+      - "--user=${OVERLORD_TURN_USERNAME:-overlord}:${OVERLORD_TURN_CREDENTIAL:-changeme}"
+      - "--realm=overlord"
+      - "--no-cli"
+      - "--no-multicast-peers"
+      - "--no-loopback-peers"
+      - "--min-port=49160"
+      - "--max-port=49200"
+      - "--external-ip=${OVERLORD_PUBLIC_HOST:-127.0.0.1}"
 
 volumes:
   overlord-data:

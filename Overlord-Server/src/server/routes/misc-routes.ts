@@ -11,6 +11,7 @@ import {
   startProxy,
   stopProxy,
 } from "../socks5-proxy-manager";
+import { buildIceServers } from "../ws-rtc-signaling";
 
 type MiscRouteDeps = {
   CORS_HEADERS: Record<string, string>;
@@ -692,6 +693,20 @@ export async function handleMiscRoutes(
 
       return Response.json({ ok: true, buildRateLimit: updated }, { headers: deps.CORS_HEADERS });
     }
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/ice-servers") {
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Not authenticated" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return Response.json(
+      { iceServers: buildIceServers(), iceTransportPolicy: "relay" },
+      { headers: deps.CORS_HEADERS },
+    );
   }
 
   return null;

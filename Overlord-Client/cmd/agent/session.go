@@ -26,6 +26,7 @@ import (
 	"overlord-client/cmd/agent/plugins"
 	rt "overlord-client/cmd/agent/runtime"
 	"overlord-client/cmd/agent/sysinfo"
+	rtcbridge "overlord-client/cmd/agent/webrtc"
 	"overlord-client/cmd/agent/wire"
 
 	"nhooyr.io/websocket"
@@ -597,6 +598,14 @@ func runSession(ctx context.Context, cancel context.CancelFunc, conn *websocket.
 	}
 
 	dispatcher := handlers.NewDispatcher(env)
+
+	rtcbridge.SetKeyframeHandler(capture.ResetPrev)
+	rtcbridge.SetCommandHandler(func(envelope map[string]any) {
+		if err := dispatcher.Dispatch(ctx, envelope); err != nil {
+			log.Printf("rtc input dispatch error: %v", err)
+		}
+	})
+	defer rtcbridge.CloseAll()
 
 	osVal := strings.TrimSpace(cfg.OS)
 	if osVal == "" {

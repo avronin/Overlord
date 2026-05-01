@@ -36,6 +36,8 @@ export const ALLOWED_CLIENT_MESSAGE_TYPES = new Set([
   "proxy_data",
   "proxy_close",
   "disconnect_info",
+  "rtc_answer",
+  "rtc_ice",
 ]);
 
 export function isAllowedClientMessageType(type: string): boolean {
